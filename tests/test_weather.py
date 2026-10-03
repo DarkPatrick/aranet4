@@ -91,7 +91,7 @@ def test_dashboard_weather_api(tmp_path):
         assert len(stations) == 3
         data = json.loads(urllib.request.urlopen(base + f"/api/weather/readings?station=ACHNA&from={SAMPLE_TS - 10}").read())
         assert data["temp"] == [20.9]
-        assert urllib.request.urlopen(base + "/weather").status == 200
+        assert urllib.request.urlopen(base + "/weather/outdoor").status == 200
         with pytest.raises(urllib.error.HTTPError) as exc:
             urllib.request.urlopen(base + "/api/weather/readings")
         assert exc.value.code == 400

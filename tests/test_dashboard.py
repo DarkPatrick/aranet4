@@ -31,7 +31,7 @@ def get(url):
 
 
 def test_index_and_static(server):
-    status, ctype, body = get(server + "/")
+    status, ctype, body = get(server + "/weather/home")
     assert status == 200 and b"echarts.min.js" in body and ctype.startswith("text/html")
     status, _, body = get(server + "/static/echarts.min.js")
     assert status == 200 and len(body) > 100_000
@@ -83,3 +83,15 @@ def test_missing_db_reads_as_empty(tmp_path):
         assert not path.exists()  # the dashboard never creates or writes the database
     finally:
         srv.shutdown()
+
+
+@pytest.mark.parametrize("old,new", [("/", "/weather/home"), ("/weather", "/weather/outdoor"), ("/weather.html", "/weather/outdoor")])
+def test_old_addresses_redirect(server, old, new):
+    class NoFollow(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *a, **k):
+            return None
+    opener = urllib.request.build_opener(NoFollow)
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        opener.open(server + old)
+    assert exc.value.code == 302 and exc.value.headers["Location"] == new
+    assert get(server + old)[0] == 200  # a browser just follows it

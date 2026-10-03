@@ -42,4 +42,4 @@ else
 fi
 
 PORT="$(grep -E '^ARANET_PORT=' config.env | cut -d= -f2 || true)"
-echo "==> dashboard: http://$(hostname).local:${PORT:-8080}"
+echo "==> dashboard: http://$(hostname).local:${PORT:-8080}/weather/home"

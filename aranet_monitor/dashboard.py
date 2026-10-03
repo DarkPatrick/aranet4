@@ -1,11 +1,11 @@
 """Dashboard: a tiny stdlib HTTP server with a JSON API and a static ECharts page.
 
-GET /                     -> static/index.html
+GET /weather/home         -> static/index.html (home sensor); "/" redirects here
+GET /weather/outdoor      -> static/weather.html (Cyprus weather stations); "/weather" redirects here
 GET /static/<file>        -> static assets (echarts is vendored, works offline)
 GET /api/readings?hours=N -> readings for the last N hours (no param: everything)
 GET /api/readings?from=T&to=T -> readings in [from, to], unix seconds, either bound optional
 GET /api/latest           -> latest reading + device status
-GET /weather              -> static/weather.html (Cyprus weather stations)
 GET /api/weather/stations -> stations with coordinates and latest observation
 GET /api/weather/readings?station=CODE&from=T&to=T -> one station's observations (+ NET "feels like")
 GET /api/weather/marine   -> latest sea forecast, sea surface temperature history, current warnings
@@ -29,6 +29,9 @@ from . import db, dom, weather
 from .config import get_settings
 
 STATIC_DIR = Path(__file__).parent / "static"
+# old addresses keep working
+REDIRECTS = {"/": "/weather/home", "/index.html": "/weather/home", "/weather": "/weather/outdoor",
+             "/weather/": "/weather/outdoor", "/weather.html": "/weather/outdoor"}
 log = logging.getLogger("aranet.dashboard")
 
 
@@ -44,7 +47,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         url = urlparse(self.path)
         try:
-            if url.path in ("/", "/index.html"):
+            if url.path in REDIRECTS:
+                self._redirect(REDIRECTS[url.path] + (f"?{url.query}" if url.query else ""))
+            elif url.path in ("/weather/home", "/weather/home/"):
                 self._file(STATIC_DIR / "index.html")
             elif url.path.startswith("/static/"):
                 self._static(url.path[len("/static/"):])
@@ -52,7 +57,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._readings(parse_qs(url.query))
             elif url.path == "/api/latest":
                 self._json(self._with_db(db.latest))
-            elif url.path in ("/weather", "/weather.html"):
+            elif url.path in ("/weather/outdoor", "/weather/outdoor/"):
                 self._file(STATIC_DIR / "weather.html")
             elif url.path == "/api/weather/stations":
                 self._json(self._with_weather(weather.station_list))
@@ -72,6 +77,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_error(HTTPStatus.NOT_FOUND)
         except ValueError as exc:
             self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def _redirect(self, location: str):
+        self.send_response(HTTPStatus.FOUND)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _with_db(self, fn, *args):
         conn = db.connect_readonly(self.db_path)
