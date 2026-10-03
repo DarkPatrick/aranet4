@@ -9,14 +9,15 @@ set -euo pipefail
 DOMAIN="$1"; PORT="$2"; PI_KEY="$3"
 APP_PORT=8091
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-DATA=/home/aranet/data
+DATA=/home/aranet/data          # Pi pushes aranet.db here (write-only for the Pi key)
+WEATHER=/home/aranet/weather    # the server collects the weather feed itself
 
 [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ] || { echo "no certificate for $DOMAIN"; exit 1; }
 
 echo "==> user 'aranet': receives the database, write-only rsync into $DATA"
 id aranet >/dev/null 2>&1 || useradd --create-home --shell /bin/bash aranet
 passwd -l aranet >/dev/null
-install -d -o aranet -g aranet -m 755 "$DATA"
+install -d -o aranet -g aranet -m 755 "$DATA" "$WEATHER"
 install -d -o aranet -g aranet -m 700 /home/aranet/.ssh
 echo "restrict,command=\"/usr/bin/rrsync -wo $DATA\" $PI_KEY" > /home/aranet/.ssh/authorized_keys
 chown aranet:aranet /home/aranet/.ssh/authorized_keys; chmod 600 /home/aranet/.ssh/authorized_keys
@@ -30,12 +31,15 @@ python3 -m venv "$DIR/.venv"
 "$DIR/.venv/bin/pip" install -q -e "$DIR"
 cat > "$DIR/config.env" <<CFG
 ARANET_DB=$DATA/aranet.db
+ARANET_WEATHER_DB=$WEATHER/weather.db
 ARANET_HOST=127.0.0.1
 ARANET_PORT=$APP_PORT
 CFG
-sed -e "s|__DIR__|$DIR|g" -e "s|__USER__|aranet|g" "$DIR/deploy/aranet-dashboard.service" > /etc/systemd/system/aranet-dashboard.service
+for unit in aranet-dashboard.service aranet-weather.service aranet-weather.timer; do
+  sed -e "s|__DIR__|$DIR|g" -e "s|__USER__|aranet|g" "$DIR/deploy/$unit" > "/etc/systemd/system/$unit"
+done
 systemctl daemon-reload
-systemctl enable --now aranet-dashboard.service
+systemctl enable --now aranet-dashboard.service aranet-weather.timer
 systemctl restart aranet-dashboard.service
 
 echo "==> nginx on https://$DOMAIN:$PORT"

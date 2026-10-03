@@ -30,6 +30,7 @@ class Settings:
     port: int
     sync_target: str
     sync_key: str
+    weather_db: str
 
 
 def get_settings(config_file: str | None = None) -> Settings:
@@ -41,4 +42,5 @@ def get_settings(config_file: str | None = None) -> Settings:
         port=int(os.environ.get("ARANET_PORT", "8080")),
         sync_target=os.environ.get("ARANET_SYNC_TARGET", "").strip(),
         sync_key=os.path.expanduser(os.environ.get("ARANET_SYNC_KEY", "~/.ssh/id_ed25519_aranet_sync")),
+        weather_db=os.environ.get("ARANET_WEATHER_DB", "data/weather.db"),
     )

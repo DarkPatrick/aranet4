@@ -5,6 +5,9 @@ GET /static/<file>        -> static assets (echarts is vendored, works offline)
 GET /api/readings?hours=N -> readings for the last N hours (no param: everything)
 GET /api/readings?from=T&to=T -> readings in [from, to], unix seconds, either bound optional
 GET /api/latest           -> latest reading + device status
+GET /weather              -> static/weather.html (Cyprus weather stations)
+GET /api/weather/stations -> stations with coordinates and latest observation
+GET /api/weather/readings?station=CODE&from=T&to=T -> one station's observations
 """
 
 import argparse
@@ -19,7 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import db
+from . import db, weather
 from .config import get_settings
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -27,8 +30,9 @@ log = logging.getLogger("aranet.dashboard")
 
 
 class Handler(BaseHTTPRequestHandler):
-    def __init__(self, *args, db_path: str, **kwargs):
+    def __init__(self, *args, db_path: str, weather_db: str, **kwargs):
         self.db_path = db_path
+        self.weather_db = weather_db
         super().__init__(*args, **kwargs)
 
     def log_message(self, fmt, *args):
@@ -45,6 +49,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._readings(parse_qs(url.query))
             elif url.path == "/api/latest":
                 self._json(self._with_db(db.latest))
+            elif url.path in ("/weather", "/weather.html"):
+                self._file(STATIC_DIR / "weather.html")
+            elif url.path == "/api/weather/stations":
+                self._json(self._with_weather(weather.station_list))
+            elif url.path == "/api/weather/readings":
+                self._weather_readings(parse_qs(url.query))
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
         except ValueError as exc:
@@ -57,7 +67,15 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             conn.close()
 
-    def _readings(self, query):
+    def _with_weather(self, fn, *args):
+        conn = db.connect_readonly(self.weather_db, empty=weather.connect)
+        try:
+            return fn(conn, *args)
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _range(query):
         def param(name):
             v = query.get(name, [None])[0]
             return None if v in (None, "", "all") else v
@@ -73,7 +91,16 @@ class Handler(BaseHTTPRequestHandler):
         ts_to = int(ts_to) if ts_to is not None else None
         if ts_from is not None and ts_to is not None and ts_from > ts_to:
             raise ValueError("from must be <= to")
-        rows = self._with_db(db.fetch_readings, ts_from, ts_to)
+        return ts_from, ts_to
+
+    def _weather_readings(self, query):
+        station = query.get("station", [""])[0]
+        if not station:
+            raise ValueError("station is required")
+        self._json(self._with_weather(weather.readings, station, *self._range(query)))
+
+    def _readings(self, query):
+        rows = self._with_db(db.fetch_readings, *self._range(query))
         # columnar: smaller payload and maps straight onto echarts series
         self._json({
             "ts": [r["ts"] for r in rows],
@@ -110,8 +137,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def make_server(host: str, port: int, db_path: str) -> ThreadingHTTPServer:
-    return ThreadingHTTPServer((host, port), partial(Handler, db_path=db_path))
+def make_server(host: str, port: int, db_path: str, weather_db: str = "data/weather.db") -> ThreadingHTTPServer:
+    return ThreadingHTTPServer((host, port), partial(Handler, db_path=db_path, weather_db=weather_db))
 
 
 def main(argv=None) -> int:
@@ -124,7 +151,7 @@ def main(argv=None) -> int:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     s = get_settings(args.config)
-    server = make_server(args.host or s.host, args.port or s.port, args.db or s.db_path)
+    server = make_server(args.host or s.host, args.port or s.port, args.db or s.db_path, s.weather_db)
     log.info("dashboard on http://%s:%d (db %s)", *server.server_address[:2], args.db or s.db_path)
     try:
         server.serve_forever()

@@ -19,6 +19,7 @@ test = ["pytest>=8"]
 aranet-collect = "aranet_monitor.collector:main"
 aranet-dashboard = "aranet_monitor.dashboard:main"
 aranet-sync = "aranet_monitor.sync:main"
+aranet-weather = "aranet_monitor.weather:main"
 
 [tool.setuptools.packages.find]
 include = ["aranet_monitor*"]

@@ -28,11 +28,12 @@ if [ ! -f config.env ]; then
 fi
 
 echo "==> systemd units"
-for unit in aranet-collector.service aranet-collector.timer aranet-dashboard.service; do
+for unit in aranet-collector.service aranet-collector.timer aranet-dashboard.service aranet-weather.service aranet-weather.timer; do
   sed -e "s|__DIR__|$DIR|g" -e "s|__USER__|$USER_NAME|g" "deploy/$unit" | sudo tee "/etc/systemd/system/$unit" >/dev/null
 done
 sudo systemctl daemon-reload
-sudo systemctl enable --now aranet-dashboard.service
+sudo systemctl enable --now aranet-dashboard.service aranet-weather.timer
+sudo systemctl restart aranet-dashboard.service  # pick up code updates on re-runs
 if grep -q '^ARANET_ADDRESS=..' config.env; then
   sudo systemctl enable --now aranet-collector.timer
   echo "==> collector timer enabled"

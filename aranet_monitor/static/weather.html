@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Погода на Кипре</title>
+<link rel="stylesheet" href="/static/leaflet.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrap">
+  <nav><a href="/">Aranet4</a><a class="here" href="/weather">Погода на Кипре</a></nav>
+  <div class="meta" id="meta">загрузка…</div>
+
+  <div id="map"></div>
+
+  <div class="panel">
+    <div class="row">
+      <span class="tag">Станция</span>
+      <select id="station" class="station"></select>
+      <span class="note" id="station-meta" style="margin:0"></span>
+    </div>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="panel" id="periods"></div>
+
+  <div class="panel scroll hidden" id="cmp-panel">
+    <table class="cmp" id="cmp-table"></table>
+    <div class="note">Δ = B − A, Δ% = (B − A) / A. Осадки — сумма за период. На графиках A сдвинут к началу B и нарисован пунктиром; осадки показаны суммами по часам (за период больше 3 дней — по дням).</div>
+  </div>
+
+  <div class="chart big hidden" id="c-home"></div>
+  <div class="chart" id="c-temp"></div>
+  <div class="chart" id="c-rh"></div>
+  <div class="chart" id="c-rain"></div>
+  <div class="chart" id="c-wind"></div>
+  <div class="chart" id="c-pres"></div>
+  <div class="chart" id="c-rad"></div>
+  <div class="chart" id="c-snow"></div>
+  <div class="note">Данные: Cyprus Department of Meteorology, сырые 10-минутные значения без контроля качества.</div>
+</div>
+
+<script src="/static/echarts.min.js"></script>
+<script src="/static/leaflet.js"></script>
+<script src="/static/common.js"></script>
+<script src="/static/weather.js"></script>
+</body>
+</html>

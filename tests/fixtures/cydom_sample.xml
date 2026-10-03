@@ -1,0 +1,163 @@
+<?xml version='1.0' encoding='utf-8'?>
+<meteorology>
+  <copyright>Weather Data Copyright The Cyprus Department of Meteorology. This information is intended as a guide only and every reasonable effort shall be made to keep it current and accurate. It does not however purport to be a legal interpretation. In the event of any discrepancy between the version of a document obtained from this website and the designated official version, the designated official version is the authoritative one.</copyright>
+  <stations>
+    <station>
+      <station_code>ACHNA</station_code>
+      <station_latitude>35.0255056</station_latitude>
+      <station_longitude>33.7744306</station_longitude>
+    </station>
+    <station>
+      <station_code>AMARGETI</station_code>
+      <station_latitude>34.826117</station_latitude>
+      <station_longitude>32.588903</station_longitude>
+    </station>
+    <station>
+      <station_code>LCLK</station_code>
+      <station_latitude>34.873476</station_latitude>
+      <station_longitude>33.617338</station_longitude>
+    </station>
+    </stations>
+  <observations>
+    <station_code>ACHNA</station_code>
+    <date_time>2026-10-03 20:20 (Local Time)</date_time>
+    <observation>
+      <observation_name>Air Temperature (1.2m)</observation_name>
+      <observation_value>20.9</observation_value>
+      <observation_unit>Celcius</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Extreme Day Max. Temp.</observation_name>
+      <observation_value>28.8</observation_value>
+      <observation_unit>Celcius</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Extreme Day Min. Temp.</observation_name>
+      <observation_value>14.2</observation_value>
+      <observation_unit>Celcius</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Wind Speed (2m)</observation_name>
+      <observation_value>0.3</observation_value>
+      <observation_unit>m/s</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Wind Speed (10m)</observation_name>
+      <observation_value>1.5</observation_value>
+      <observation_unit>Knots</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Wind Direction (10m)</observation_name>
+      <observation_value>293</observation_value>
+      <observation_unit>Degrees</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Relative Humidity (1.2m)</observation_name>
+      <observation_value>70</observation_value>
+      <observation_unit>%</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Accumulated Rainfall (10 min.)</observation_name>
+      <observation_value>0.0</observation_value>
+      <observation_unit>mm</observation_unit>
+    </observation>
+  </observations>
+  <observations>
+    <station_code>AMARGETI</station_code>
+    <date_time>2026-10-03 20:20 (Local Time)</date_time>
+    <observation>
+      <observation_name>Air Temperature (1.2m)</observation_name>
+      <observation_value>18.6</observation_value>
+      <observation_unit>Celcius</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Extreme Day Max. Temp.</observation_name>
+      <observation_value>25.5</observation_value>
+      <observation_unit>Celcius</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Extreme Day Min. Temp.</observation_name>
+      <observation_value>15.8</observation_value>
+      <observation_unit>Celcius</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Wind Speed (10m)</observation_name>
+      <observation_value>5.0</observation_value>
+      <observation_unit>Knots</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Wind Speed (2m)</observation_name>
+      <observation_value>1.7</observation_value>
+      <observation_unit>m/s</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Wind Direction (10m)</observation_name>
+      <observation_value>114</observation_value>
+      <observation_unit>Degrees</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Relative Humidity (1.2m)</observation_name>
+      <observation_value>71</observation_value>
+      <observation_unit>%</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Accumulated Rainfall (10 min.)</observation_name>
+      <observation_value>0.0</observation_value>
+      <observation_unit>mm</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Atmospheric Pressure (Station Level)</observation_name>
+      <observation_value>966.7</observation_value>
+      <observation_unit>hPa</observation_unit>
+    </observation>
+  </observations>
+  <observations>
+    <station_code>LCLK</station_code>
+    <date_time>2026-10-03 20:20 (Local Time)</date_time>
+    <observation>
+      <observation_name>Air Temperature (1.2m)</observation_name>
+      <observation_value>20.1</observation_value>
+      <observation_unit>Celcius</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Extreme Day Max. Temp.</observation_name>
+      <observation_value>28.7</observation_value>
+      <observation_unit>Celcius</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Extreme Day Min. Temp.</observation_name>
+      <observation_value>15.7</observation_value>
+      <observation_unit>Celcius</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Wind Speed (2m)</observation_name>
+      <observation_value>0.7</observation_value>
+      <observation_unit>m/s</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Wind Speed (10m) at Runway 22</observation_name>
+      <observation_value>2.4</observation_value>
+      <observation_unit>Knots</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Wind Direction (10m) at Runway 22</observation_name>
+      <observation_value>317</observation_value>
+      <observation_unit>Degrees</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Relative Humidity (1.2m)</observation_name>
+      <observation_value>80</observation_value>
+      <observation_unit>%</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Accumulated Rainfall (10 min.)</observation_name>
+      <observation_value>0.0</observation_value>
+      <observation_unit>mm</observation_unit>
+    </observation>
+    <observation>
+      <observation_name>Atmospheric Pressure (QNH)</observation_name>
+      <observation_value>1018.2</observation_value>
+      <observation_unit>hPa</observation_unit>
+    </observation>
+  </observations>
+  </meteorology>

@@ -32,11 +32,12 @@ class Reading:
     pressure: float | None
 
 
-def connect_readonly(path: str) -> sqlite3.Connection:
+def connect_readonly(path: str, empty=None) -> sqlite3.Connection:
     """Read-only connection for the dashboard. Never writes, so it is safe on a
-    copy that is atomically replaced by sync. A missing file reads as empty."""
+    copy that is atomically replaced by sync. A missing file reads as empty
+    (`empty` builds the in-memory stand-in; default: this module's schema)."""
     if not Path(path).exists():
-        return connect(":memory:")
+        return (empty or connect)(":memory:")
     conn = sqlite3.connect(f"{Path(path).resolve().as_uri()}?mode=ro", uri=True, timeout=30)
     conn.row_factory = sqlite3.Row
     return conn
