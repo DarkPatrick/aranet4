@@ -11,6 +11,12 @@
 
 Из зависимостей только [`aranet4`](https://github.com/Anrijs/Aranet4-Python) (тянет `bleak`). Работает на macOS и Linux (BlueZ).
 
+## Погода на Кипре (`/weather`)
+
+`aranet-weather` раз в 5 минут забирает открытый фид Метеослужбы Кипра (https://www.dom.org.cy/AWS/OpenData/CyDoM.xml): около 55 автоматических станций, 10-минутные средние. Запрос условный (ETag), поэтому неизменившийся фид отвечает 304. Истории в фиде нет, только последнее значение каждой станции, поэтому опрос должен идти постоянно. Данные пишутся в `data/weather.db`: таблица `observations(station, ts, temp, rh, rain, wind2, wind10, wdir, rad_global, rad_direct, temp_5cm, p_station, p_msl, p_qnh, rain24, rain_int, snow, extra)`. Ветер хранится в м/с (фид даёт 10-метровый ветер в узлах), осадки — сумма за 10 минут. Нестандартные величины, например ветер по полосам аэропорта, лежат в JSON-поле `extra`. Объём — около 300 МБ в год.
+
+Страница `/weather`: карта станций (цвет — температура), выбор станции на карте или из списка, текущие значения, графики, те же периоды и сравнение A/B, что для Aranet, плюс график «дома и на улице» (Aranet рядом с выбранной станцией). Показываются только величины, которые станция реально меряет.
+
 ## Быстрый старт (macOS / любая машина)
 
 ```bash
@@ -19,6 +25,7 @@ python3 -m venv .venv
 .venv/bin/aranet-collect --scan              # найти адрес датчика
 cp config.env.example config.env             # вписать ARANET_ADDRESS
 .venv/bin/aranet-collect                     # один сбор
+.venv/bin/aranet-weather                     # один снимок погодного фида
 .venv/bin/aranet-dashboard                   # http://localhost:8080
 .venv/bin/pytest                             # тесты
 ```
@@ -35,7 +42,7 @@ nano config.env                              # ARANET_ADDRESS=...
 sudo systemctl enable --now aranet-collector.timer
 ```
 
-`install.sh` ставит `bluez` (и `pi-bluetooth` на Pi), создаёт `.venv`, кладёт systemd-юниты и включает дашборд на `http://<host>.local:8080`.
+`install.sh` ставит `bluez` (и `pi-bluetooth` на Pi), создаёт `.venv`, кладёт systemd-юниты, включает сборщик погоды и дашборд на `http://<host>.local:8080`.
 
 Полезное:
 
@@ -43,6 +50,7 @@ sudo systemctl enable --now aranet-collector.timer
 systemctl list-timers aranet-collector.timer      # когда следующий запуск
 journalctl -u aranet-collector -n 20              # логи сборщика
 journalctl -u aranet-dashboard -f                 # логи дашборда
+journalctl -u aranet-weather -n 20                # логи сборщика погоды
 sudo systemctl start aranet-collector             # собрать прямо сейчас
 ```
 
@@ -92,7 +100,7 @@ git clone https://github.com/DarkPatrick/aranet4.git /opt/aranet4
 /opt/aranet4/deploy/server/setup.sh <домен> <https-порт> "<публичный ключ Pi>"
 ```
 
-Скрипт создаёт пользователя `aranet`, которому разрешено только класть файлы в `/home/aranet/data` (`rrsync -wo`), сервис дашборда на `127.0.0.1:8091` и nginx на `<https-порт>` с basic auth (пароль печатается один раз). Ещё он добавляет хук, который перезагружает nginx после продления сертификата. nginx не занимает порт 80, потому что certbot продлевает сертификат своим standalone-сервером.
+Скрипт создаёт пользователя `aranet`, которому разрешено только класть файлы в `/home/aranet/data` (`rrsync -wo`), сборщик погоды (сервер забирает фид сам, база в `/home/aranet/weather`), сервис дашборда на `127.0.0.1:8091` и nginx на `<https-порт>` с basic auth (пароль печатается один раз). Ещё он добавляет хук, который перезагружает nginx после продления сертификата. nginx не занимает порт 80, потому что certbot продлевает сертификат своим standalone-сервером.
 
 На Pi:
 
