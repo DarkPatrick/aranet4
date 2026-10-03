@@ -9,10 +9,11 @@ USER_NAME="$(id -un)"
 cd "$DIR"
 
 echo "==> system packages"
-sudo apt-get update -qq
-sudo apt-get install -y -qq python3-venv bluez
+APT="sudo apt-get -o DPkg::Lock::Timeout=900"  # wait for unattended-upgrades instead of failing
+$APT update -qq
+$APT install -y -qq python3-venv bluez
 # Raspberry Pi needs pi-bluetooth to bring up the onboard BT chip; harmless to skip elsewhere
-sudo apt-get install -y -qq pi-bluetooth 2>/dev/null || true
+$APT install -y -qq pi-bluetooth 2>/dev/null || true
 sudo systemctl enable --now bluetooth
 sudo usermod -aG bluetooth "$USER_NAME"
 
