@@ -31,7 +31,10 @@ log = logging.getLogger("aranet.dom")
 
 BASE = "https://www.dom.org.cy"
 SEA_PAGES = {k: f"{BASE}/FORECAST/sea_{k.lower()}_en.html" for k in "ABCD"}
-WARNINGS_URL = f"{BASE}/WARNING/"
+# the Department's current site; the old {BASE}/WARNING/ page is no longer filled in
+WARNINGS_URL = "https://agromet.dom.org.cy/weather/warnings"
+# EUMETNET Meteoalarm: the same warnings as structured CAP (English + Greek)
+METEOALARM_URL = "https://feeds.meteoalarm.org/api/v1/warnings/feeds-cyprus"
 RADAR_IMAGES = ["RADAR_Static.png", "RADAR_PFO_MAX_Static.png", "RADAR_LCA_MAX_Static.png"]
 RADAR_URL = f"{BASE}/RADAR_IMG/"
 CLIMATE_ROOT = f"{BASE}/CLIMATOLOGY/English/Daily%20Temperature%20and%20Precipitation%20Data/"
@@ -56,6 +59,23 @@ CREATE TABLE IF NOT EXISTS sea_forecasts (
 CREATE TABLE IF NOT EXISTS warnings (
     ts   INTEGER PRIMARY KEY,       -- when this text was first seen
     text TEXT NOT NULL              -- '' = no warnings in force
+);
+
+CREATE TABLE IF NOT EXISTS alerts (
+    identifier TEXT PRIMARY KEY,    -- CAP identifier
+    sent       INTEGER,
+    msg_type   TEXT,                -- Alert / Update / Cancel
+    refs       TEXT,                -- identifiers this one updates or cancels
+    level      INTEGER,             -- 2 yellow, 3 orange, 4 red
+    type       INTEGER,             -- Meteoalarm awareness type (3 = thunderstorm, ...)
+    event      TEXT,
+    onset      INTEGER,
+    expires    INTEGER,
+    headline   TEXT,
+    description TEXT,
+    instruction TEXT,
+    description_el TEXT,
+    areas      TEXT
 );
 
 CREATE TABLE IF NOT EXISTS radar (
@@ -205,9 +225,64 @@ def store_sea(conn, fc: dict) -> int:
 
 # ---------- warnings ----------
 
+NO_WARNINGS = "Καμία Προειδοποίηση"  # "no warning"
+
+
 def parse_warnings(raw: bytes) -> str:
-    lines = [l for l in html_text(raw) if l.upper() != "ISSUED WEATHER WARNINGS"]
-    return "\n".join(lines).strip()
+    """Text of the warning card on agromet.dom.org.cy; '' when there is none."""
+    s = raw.decode("utf-8", errors="replace")
+    m = re.search(r'id="warning_card"[^>]*>(.*?)<div class="card-footer', s, re.S)
+    if not m:  # page layout changed: better to show nothing than the whole page
+        log.warning("warnings page: card not found")
+        return ""
+    text = "\n".join(html_text(m.group(1).encode())).strip()
+    return "" if text == NO_WARNINGS else text
+
+
+def _iso(ts: str | None) -> int | None:
+    return int(datetime.fromisoformat(ts).timestamp()) if ts else None
+
+
+def parse_meteoalarm(raw: bytes) -> list[dict]:
+    out = []
+    for w in json.loads(raw).get("warnings", []):
+        a = w.get("alert", {})
+        infos = a.get("info", [])
+        en = next((i for i in infos if str(i.get("language", "")).startswith("en")), infos[0] if infos else {})
+        el = next((i for i in infos if str(i.get("language", "")).startswith("el")), {})
+        params = {p.get("valueName"): p.get("value", "") for p in en.get("parameter", [])}
+        num = lambda v: int(v.split(";")[0]) if v and v.split(";")[0].strip().isdigit() else None
+        refs = " ".join(r.split(",")[1] for r in (a.get("references") or "").split() if r.count(",") == 2)
+        out.append({
+            "identifier": a.get("identifier"), "sent": _iso(a.get("sent")), "msg_type": a.get("msgType"),
+            "refs": refs or None, "level": num(params.get("awareness_level")), "type": num(params.get("awareness_type")),
+            "event": en.get("event"), "onset": _iso(en.get("onset") or en.get("effective")), "expires": _iso(en.get("expires")),
+            "headline": en.get("headline"), "description": en.get("description"), "instruction": en.get("instruction"),
+            "description_el": el.get("description"),
+            "areas": ", ".join(x.get("areaDesc", "") for x in en.get("area", [])) or None,
+        })
+    return [r for r in out if r["identifier"]]
+
+
+def store_alerts(conn, alerts: list[dict]) -> int:
+    cols = ["identifier", "sent", "msg_type", "refs", "level", "type", "event", "onset", "expires",
+            "headline", "description", "instruction", "description_el", "areas"]
+    before = conn.total_changes
+    with conn:
+        conn.executemany(
+            f"INSERT OR REPLACE INTO alerts ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
+            [[a[c] for c in cols] for a in alerts])
+    return conn.total_changes - before
+
+
+def active_alerts(conn, now: int | None = None) -> list[dict]:
+    """Alerts in force or still to come: not expired, not cancelled, not superseded
+    by an update (CAP `references`)."""
+    now = now or int(time.time())
+    rows = [dict(r) for r in conn.execute("SELECT * FROM alerts ORDER BY sent")]
+    replaced = {ref for r in rows if r["refs"] for ref in r["refs"].split()}
+    return [r for r in rows
+            if r["msg_type"] != "Cancel" and r["identifier"] not in replaced and (r["expires"] or 0) > now]
 
 
 def store_warnings(conn, text: str, now: int | None = None) -> bool:
@@ -254,6 +329,12 @@ def collect_forecast(db_path: str) -> None:
             else:
                 log.warning("sea forecast %s: page not recognised", issue)
         check_radar(conn)
+        try:
+            alerts = parse_meteoalarm(get(METEOALARM_URL))
+            store_alerts(conn, alerts)
+            log.info("meteoalarm: %d in feed, %d active", len(alerts), len(active_alerts(conn)))
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+            log.warning("meteoalarm: %s", exc)
         text = parse_warnings(get(WARNINGS_URL))
         changed = store_warnings(conn, text)
         log.info("warnings: %s%s", (text[:80] or "none"), " (changed)" if changed else "")
@@ -485,7 +566,14 @@ def radar_status(conn) -> dict:
         return {}
 
 
-@_tolerant(lambda: {"forecast": None, "sst": {"ts": [], "sst": []}, "warnings": None, "radar": {}})
+def _active_alerts_safe(conn) -> list[dict]:
+    try:
+        return active_alerts(conn)
+    except sqlite3.OperationalError:
+        return []
+
+
+@_tolerant(lambda: {"forecast": None, "sst": {"ts": [], "sst": []}, "warnings": None, "radar": {}, "alerts": []})
 def marine(conn) -> dict:
     latest = conn.execute("SELECT * FROM sea_forecasts ORDER BY issued DESC, valid_from DESC LIMIT 1").fetchone()
     sst = conn.execute(
@@ -500,6 +588,7 @@ def marine(conn) -> dict:
         "sst": {"ts": [r["ts"] for r in sst], "sst": [r["sst"] for r in sst]},
         "warnings": dict(warn) if warn else None,
         "radar": radar_status(conn),
+        "alerts": _active_alerts_safe(conn),
     }
 
 

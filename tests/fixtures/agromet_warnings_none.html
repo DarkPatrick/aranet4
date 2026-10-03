@@ -1,0 +1,1076 @@
+
+
+<!DOCTYPE html>
+<html
+  lang="gr"
+  data-layout="horizontal"
+  data-layout-style=""
+  data-layout-position="fixed"
+  data-topbar="light"
+>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Agromet</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Cyprus Department of Meteorology - Agrometeorology Page">
+    <meta name="keywords" content="Cyprus,Meteorology,Agrometeorology,Government,Official,Agromet,Agrometeo,Agro,Weather,DOM,Department,Αγρομετεωρολογία,Κύπρος,Μετεωρολογία,Καιρός,Τμήμα">
+
+    <link rel="icon" href="/staticfiles/images/logo.png" />
+
+    <!-- Layout config Js -->
+    <script src="/staticfiles/js/layout.js"></script>
+    <!-- Bootstrap Css -->
+    <link
+      href="/staticfiles/css/bootstrap.min.css"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <!-- Icons Css -->
+    <link
+      href="/staticfiles/css/icons.min.css"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <!-- App Css-->
+    <link
+      href="/staticfiles/css/app.min.css"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <!-- custom Css-->
+    <link
+      href="/staticfiles/css/custom.min.css"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <!--Sweetalert-->
+    <link 
+      href="/staticfiles/libs/sweetalert2/sweetalert2.min.css" 
+      rel="stylesheet" 
+      type="text/css"
+    />
+
+
+    
+  <link href="/staticfiles/libs/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
+  <link href="/staticfiles/weather/css/warnings.css" rel="stylesheet" type="text/css"/>
+
+
+    <title></title>
+  </head>
+
+  <body>
+    <div id="layout-wrapper">
+      <header id="page-topbar">
+        <div class="layout-width">
+          <div class="navbar-header">
+            <div class="d-flex">
+              <!-- LOGO -->
+              <div class="navbar-brand-box horizontal-logo">
+                <a href="/" class="logo logo-dark">
+                  <span class="logo-sm">
+                    <img
+                      src="/staticfiles/images/logo.png"
+                      alt=""
+                      height="60"
+                    />
+                  </span>
+                  <span class="logo-lg">
+                    <img
+                      src="/staticfiles/images/logo.png"
+                      alt=""
+                      height="90"
+                    />
+                  </span>
+                </a>
+
+                <a href="/" class="logo logo-light">
+                  <span class="logo-sm">
+                    <img
+                      src="/staticfiles/images/logo.png"
+                      alt=""
+                      height="60"
+                    />
+                  </span>
+                  <span class="logo-lg">
+                    <img
+                      src="/staticfiles/images/logo.png"
+                      alt=""
+                      height="90"
+                    />
+                  </span>
+                </a>
+              </div>
+
+              <button
+                type="button"
+                class="btn btn-sm px-3 fs-16 header-item vertical-menu-btn topnav-hamburger"
+                id="topnav-hamburger-icon"
+              >
+                <span class="hamburger-icon">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </span>
+              </button>
+            </div>
+
+            <div class="d-flex align-items-center">
+              <!--
+              <div class="dropdown ms-1 topbar-head-dropdown header-item">
+                <button
+                  type="button"
+                  class="btn btn-icon btn-topbar btn-ghost-secondary rounded-circle"
+                  data-bs-toggle="dropdown"
+                  aria-haspopup="true"
+                  aria-expanded="false"
+                >
+                  <img
+                    id="header-lang-img"
+                    src="/staticfiles/images/flags/gr.svg"
+                    alt="Header Language"
+                    height="20"
+                    class="rounded"
+                  />
+                </button>
+                <div class="dropdown-menu dropdown-menu-end">
+                  
+                  <a
+                    href="javascript:void(0);"
+                    class="dropdown-item notify-item language py-2"
+                    data-lang="gr"
+                    title="Greek"
+                  >
+                    <img
+                      src="/staticfiles/images/flags/gr.svg"
+                      alt="user-image"
+                      class="me-2 rounded"
+                      height="18"
+                    />
+                    <span class="align-middle">Ελλήνικά</span>
+                  </a>
+
+                  
+                  <a
+                    href="javascript:void(0);"
+                    class="dropdown-item notify-item language"
+                    data-lang="en"
+                    title="English"
+                  >
+                    <img
+                      src="/staticfiles/images/flags/gb.svg"
+                      alt="user-image"
+                      class="me-2 rounded"
+                      height="18"
+                    />
+                    <span class="align-middle">English</span>
+                  </a>
+                </div>
+              </div>
+              -->
+
+              <div class="ms-1 header-item d-none d-sm-flex">
+                <button
+                  type="button"
+                  class="btn btn-icon btn-topbar btn-ghost-secondary rounded-circle"
+                  data-toggle="fullscreen"
+                >
+                  <i class="bx bx-fullscreen fs-22"></i>
+                </button>
+              </div>
+
+              <div class="ms-1 header-item d-none d-sm-flex">
+                <button
+                  type="button"
+                  class="btn btn-icon btn-topbar btn-ghost-secondary rounded-circle light-dark-mode"
+                >
+                  <i class="bx bx-moon fs-22"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="app-menu navbar-menu">
+        <!-- LOGO -->
+        <div class="navbar-brand-box">
+          <!-- Dark Logo-->
+          <a href="/" class="logo logo-dark">
+            <span class="logo-sm">
+              <img src="/staticfiles/images/logo.png" alt="" height="60" />
+            </span>
+            <span class="logo-lg">
+              <img src="/staticfiles/images/logo.png" alt="" height="90" />
+            </span>
+          </a>
+          <!-- Light Logo-->
+          <a href="/" class="logo logo-light">
+            <span class="logo-sm">
+              <img src="/staticfiles/images/logo.png" alt="" height="60" />
+            </span>
+            <span class="logo-lg">
+              <img src="/staticfiles/images/logo.png" alt="" height="90" />
+            </span>
+          </a>
+          <button
+            type="button"
+            class="btn btn-sm p-0 fs-20 header-item float-end btn-vertical-sm-hover"
+            id="vertical-hover"
+          >
+            <i class="ri-record-circle-line"></i>
+          </button>
+        </div>
+
+        <div id="scrollbar">
+          <div class="container-fluid">
+            <div id="two-column-menu"></div>
+            <ul class="navbar-nav" id="navbar-nav">
+              <li class="menu-title"><span data-key="t-menu">Menu</span></li>
+              <li class="nav-item">
+                <a class="nav-link" href="/">
+                  <span data-key="t-landing"><i class="bx bx-home"></i></span>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a
+                  class="nav-link menu-link"
+                  href="#sidebarDashboards"
+                  data-bs-toggle="collapse"
+                  role="button"
+                  aria-expanded="false"
+                  aria-controls="sidebarDashboards"
+                >
+                  <span data-key="t-dashboards">Αγρομετεωρολογία</span>
+                </a>
+                <div class="collapse menu-dropdown" id="sidebarDashboards">
+                  <ul class="nav nav-sm flex-column">
+                    <li class="nav-item">
+                      <a
+                        href="/agrometeorology/general"
+                        class="nav-link"
+                        data-key="t-analytics"
+                      >
+                        Γενικά
+                      </a>
+                    </li>
+                    <li class="nav-item">
+                      <a
+                        href="/agrometeorology/current"
+                        class="nav-link"
+                        data-key="t-crm"
+                      >
+                        Αγρομετεωρολογικό Δελτίο
+                      </a>
+                    </li>
+                    <li class="nav-item">
+                      <a
+                        href="/agrometeorology/records"
+                        class="nav-link"
+                        data-key="t-ecommerce"
+                      >
+                        Αρχείο Αγρομετεωρολογικών Δελτίων
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+              </li>
+              <!-- end Dashboard Menu -->
+              <li class="nav-item">
+                <a
+                  class="nav-link menu-link"
+                  href="#sidebarApps"
+                  data-bs-toggle="collapse"
+                  role="button"
+                  aria-expanded="false"
+                  aria-controls="sidebarApps"
+                >
+                  <span data-key="t-apps">Καιρός</span>
+                </a>
+                <div class="collapse menu-dropdown" id="sidebarApps">
+                  <ul class="nav nav-sm flex-column">
+                    
+                    <li class="nav-item">
+                      <a
+                        href="/weather/forecasts"
+                        class="nav-link"
+                        data-key="t-chat"
+                      >
+                        Δελτία Πρόγνωσης
+                      </a>
+                    </li>
+                    <li class="nav-item">
+                      <a
+                        href="/weather/warnings"
+                        class="nav-link"
+                        data-key="t-chat"
+                      >
+                        Προειδοποιήσεις
+                      </a>
+                    </li>             
+                    <li class="nav-item">
+                      <a
+                        href="https://dom.org.cy/AWS/AWS_HS_Light.html"
+                        target="_blank"
+                        class="nav-link"
+                        data-key="t-heat-stress"
+                      >
+                        Θερμική Καταπόνηση
+                      </a>
+                    </li>       
+                  </ul>
+                </div>
+              </li>
+
+              <li class="nav-item">
+                <a
+                  class="nav-link menu-link"
+                  href="#sidebarLayouts"
+                  data-bs-toggle="collapse"
+                  role="button"
+                  aria-expanded="false"
+                  aria-controls="sidebarLayouts"
+                >
+                  <span data-key="t-layouts">Κλίμα</span>
+                  <span class="badge badge-pill bg-danger" data-key="t-hot"
+                    >Κλίμα</span
+                  >
+                </a>
+                <div class="collapse menu-dropdown" id="sidebarLayouts">
+                  <ul class="nav nav-sm flex-column">
+                    <li class="nav-item">
+                      <a
+                        href="/climate/cyprus"
+                        class="nav-link"
+                        data-key="t-horizontal"
+                        >Το κλίμα της Κύπρου</a
+                      >
+                    </li>
+                    <li class="nav-item">
+                      <a
+                        href="/climate/monthly"                        
+                        class="nav-link"
+                        data-key="t-detached"
+                        >Μηνιαίο Δελτίο Καιρού</a
+                      >
+                    </li>
+                    <li class="nav-item">
+                      <a
+                        href="/climate/seasonal"                       
+                        class="nav-link"
+                        data-key="t-two-column"
+                        >Εποχική Πρόγνωση</a
+                      >
+                    </li>
+                    <li class="nav-item">
+                      <a
+                        href="/climate/cwag_wmo"
+                        class="nav-link"
+                        data-key="t-hovered"
+                        >Μεσοπρόθεσμη Πρόγνωση</a
+                      >
+                    </li>
+                    <li class="nav-item">
+                      <a
+                        href="#sidebarClimateData"
+                        class="nav-link"
+                        data-bs-toggle="collapse"
+                        role="button"
+                        aria-expanded="false"
+                        aria-controls="sidebarClimateData"
+                        data-key="t-calender"
+                      >
+                        Κλιματολογικά Δεδομένα
+                      </a>
+                      <div
+                        class="collapse menu-dropdown"
+                        id="sidebarClimateData"
+                      >
+                        <ul class="nav nav-sm flex-column">
+                          <li class="nav-item">
+                            <a
+                              href="/climate/daily_temp_rain"                             
+                              class="nav-link"
+                              data-key="t-products"
+                            >
+                              Ημερήσια δεδομένα θερμοκρασίας και βροχόπτωσης
+                            </a>
+                          </li>
+                          <li class="nav-item">
+                            <a
+                              href="https://dom.org.cy/CLIMATOLOGY/Greek/%ce%a0%cf%81%ce%bf%ce%ba%ce%b1%cf%84%ce%b1%cf%81%ce%ba%cf%84%ce%b9%ce%ba%ce%ac%20%ce%94%ce%b5%ce%b4%ce%bf%ce%bc%ce%ad%ce%bd%ce%b1%20%ce%92%cf%81%ce%bf%cf%87%ce%ae%cf%82/"
+                              target="_blank"
+                              class="nav-link"
+                              data-key="t-product-Details"
+                            >
+                              Προκαταρκτικά δεδομένα Βροχής
+                            </a>
+                          </li>
+                          <li class="nav-item">
+                            <a
+                              href="/climate/precipitation"                           
+                              class="nav-link"
+                              data-key="t-product-Details"
+                            >
+                              Τελικά δεδομένα βροχής
+                            </a>
+                          </li>
+                        </ul>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+              </li>
+              <!-- end Dashboard Menu -->
+
+              <li class="menu-title">
+                <i class="ri-more-fill"></i>
+                <span data-key="t-pages"
+                  >Σταθμοί και Μετεωρολογικά Δεδομένα</span
+                >
+              </li>
+
+              <li class="nav-item">
+                <a
+                  class="nav-link menu-link"
+                  href="#sidebarAuth"
+                  data-bs-toggle="collapse"
+                  role="button"
+                  aria-expanded="false"
+                  aria-controls="sidebarAuth"
+                >
+                  <span data-key="t-authentication"
+                    >Σταθμοί και Μετεωρολογικά Δεδομένα</span
+                  >
+                </a>
+                <div class="collapse menu-dropdown" id="sidebarAuth">
+                  <ul class="nav nav-sm flex-column">
+                    <!--
+                    <li class="nav-item">
+                      <a
+                        href="/stations_data/basic_aws"
+                        class="nav-link"
+                        data-key="t-horizontal"
+                        >Βασικοί σταθμοί αναφοράς</a
+                      >
+                    </li>
+                    -->
+                    <li class="nav-item">
+                      <a
+                        href="/stations_data/aws"
+                        class="nav-link"
+                        data-key="t-horizontal"
+                        >Δίκτυο Αυτόματων Μετεωρολογικών Σταθμών</a
+                      >
+                    </li>
+                    <li class="nav-item">
+                      <a
+                        href="/weather/multiple_maps"
+                        class="nav-link"
+                        data-key="t-chat"
+                      >
+                        Πολλαπλοί χάρτες
+                      </a>
+                    </li>
+                    <li class="nav-item">
+                      <a
+                        href="/stations_data/radar"
+                        class="nav-link"
+                        data-key="t-horizontal"
+                        >Πρόσφατες εικόνες Radar</a
+                      >
+                    </li>                    
+                  </ul>
+                </div>
+              </li>
+
+              <li class="nav-item">
+                <a
+                  class="nav-link menu-link"
+                  href="#sidebarPages"
+                  data-bs-toggle="collapse"
+                  role="button"
+                  aria-expanded="false"
+                  aria-controls="sidebarPages"
+                >
+                  <span data-key="t-pages">Καλλιέργειες</span>
+                </a>
+                <div class="collapse menu-dropdown" id="sidebarPages">
+                  <ul class="nav nav-sm flex-column">
+                    <li class="nav-item">
+                      <a
+                        href="#basicCrops"
+                        class="nav-link"
+                        data-bs-toggle="collapse"
+                        role="button"
+                        aria-expanded="false"
+                        aria-controls="basicCrops"
+                        data-key="t-profile"
+                      >
+                        Βασικές Καλλιέργειες
+                      </a>
+                      <div class="collapse menu-dropdown" id="basicCrops">
+                        <ul class="nav nav-sm flex-column">
+                          
+                          <li class="nav-item">
+                            <a
+                              href="/crops/crop/1"
+                              class="nav-link"
+                              data-key="t-simple-page"
+                            >
+                              Ελιές
+                            </a>
+                          </li>
+                          
+                          <li class="nav-item">
+                            <a
+                              href="/crops/crop/2"
+                              class="nav-link"
+                              data-key="t-simple-page"
+                            >
+                              Αμπέλια
+                            </a>
+                          </li>
+                          
+                          <li class="nav-item">
+                            <a
+                              href="/crops/crop/3"
+                              class="nav-link"
+                              data-key="t-simple-page"
+                            >
+                              Εσπεριδοειδή
+                            </a>
+                          </li>
+                          
+                          <li class="nav-item">
+                            <a
+                              href="/crops/crop/4"
+                              class="nav-link"
+                              data-key="t-simple-page"
+                            >
+                              Πατάτες
+                            </a>
+                          </li>
+                          
+                          <li class="nav-item">
+                            <a
+                              href="/crops/crop/5"
+                              class="nav-link"
+                              data-key="t-simple-page"
+                            >
+                              Φυλλοβόλα
+                            </a>
+                          </li>
+                          
+                          <li class="nav-item">
+                            <a
+                              href="/crops/crop/6"
+                              class="nav-link"
+                              data-key="t-simple-page"
+                            >
+                              Σιτάρι και Κριθαρι
+                            </a>
+                          </li>
+                          
+                        </ul>
+                      </div>
+                    </li>
+                    <li class="nav-item">
+                      <a
+                        href="/crops/aws_crops"
+                        class="nav-link"
+                        data-key="t-starter"
+                      >
+                        Βασικές Καλλιέργειες ανά Σταθμό Αναφοράς
+                      </a>
+                    </li>
+                    <li class="nav-item">
+                      <a
+                        href="#basicStationsCrops"
+                        class="nav-link"
+                        data-bs-toggle="collapse"
+                        role="button"
+                        aria-expanded="false"
+                        aria-controls="basicStationsCrops"
+                        data-key="t-profile"
+                      >
+                        Οδηγίες φυτοπροστασίας
+                      </a>
+                      <div
+                        class="collapse menu-dropdown"
+                        id="basicStationsCrops"
+                      >
+                        <ul class="nav nav-sm flex-column">
+                          
+                          <li class="nav-item">
+                            <a
+                              href="/crops/crop_instructions/1"
+                              class="nav-link"
+                              data-key="t-simple-page"
+                            >
+                              Ελιές
+                            </a>
+                          </li>
+                          
+                          <li class="nav-item">
+                            <a
+                              href="/crops/crop_instructions/2"
+                              class="nav-link"
+                              data-key="t-simple-page"
+                            >
+                              Αμπέλια
+                            </a>
+                          </li>
+                          
+                          <li class="nav-item">
+                            <a
+                              href="/crops/crop_instructions/3"
+                              class="nav-link"
+                              data-key="t-simple-page"
+                            >
+                              Εσπεριδοειδή
+                            </a>
+                          </li>
+                          
+                          <li class="nav-item">
+                            <a
+                              href="/crops/crop_instructions/4"
+                              class="nav-link"
+                              data-key="t-simple-page"
+                            >
+                              Πατάτες
+                            </a>
+                          </li>
+                          
+                          <li class="nav-item">
+                            <a
+                              href="/crops/crop_instructions/5"
+                              class="nav-link"
+                              data-key="t-simple-page"
+                            >
+                              Φυλλοβόλα
+                            </a>
+                          </li>
+                          
+                          <li class="nav-item">
+                            <a
+                              href="/crops/crop_instructions/6"
+                              class="nav-link"
+                              data-key="t-simple-page"
+                            >
+                              Σιτάρι και Κριθαρι
+                            </a>
+                          </li>
+                          
+                        </ul>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+              </li>
+
+              <li class="nav-item">
+                <a
+                  class="nav-link menu-link"
+                  href="#sidebarLanding"
+                  data-bs-toggle="collapse"
+                  role="button"
+                  aria-expanded="false"
+                  aria-controls="sidebarLanding"
+                >
+                  <span data-key="t-landing">Τμήμα Μετεωρολογίας</span>
+                </a>
+                <div class="collapse menu-dropdown" id="sidebarLanding">
+                  <ul class="nav nav-sm flex-column">
+                    <li class="nav-item">
+                      <a
+                        href="/dom/mission"
+                        class="nav-link"
+                        data-key="t-one-page"
+                      >
+                        Αποστολή και Αρμοδιότητες
+                      </a>
+                    </li>
+                    <li class="nav-item">
+                      <a
+                        href="/dom/activities"
+                        class="nav-link"
+                        data-key="t-nft-landing"
+                      >
+                        Δραστηριότητες
+                      </a>
+                    </li>
+                    <li class="nav-item">
+                      <a
+                        href="/dom/coop"
+                        class="nav-link"
+                        data-key="t-job"
+                        >Συνεργασίες</a
+                      >
+                    </li>
+                  </ul>
+                </div>
+              </li>
+
+              <li class="nav-item">
+                <a class="nav-link" href="/contact/">
+                  <span data-key="t-landing">Επικοινωνία</span>
+                </a>
+              </li>
+            </ul>
+          </div>
+          <!-- Sidebar -->
+        </div>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <div class="page-content">
+        <div class="container-fluid">
+          
+    <div class="row">
+    <div class="col-12">
+        <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+            <h4 class="mb-sm-0"></h4>
+
+            <div class="page-title-right">
+                <ol class="breadcrumb m-0">                  
+                    <li class="breadcrumb-item"><a href="/">Αρχική</a></li>                   
+                    <li class="breadcrumb-item">Καιρός</li>      
+                    <li class="breadcrumb-item active">Προειδοποιήσεις</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+  </div>
+ 
+          
+<div class="row">
+  <div class="col-xxl-12">
+    <div class="card">
+      <div class="card-header align-items-center d-flex">
+        <h4 class="card-title mb-0 flex-grow-1">ΠΡΟΕΙΔΟΠΟΙΗΣΕΙΣ</h4>                
+      </div>                
+      <div class="card-body pb-0">
+        <div class="row">
+          <div class="offset-xxl-3 col-xxl-6">
+
+            <div id="warning_card" class="card card-light">
+                              
+                <div class="card-body">                
+                  <div class="flex-shrink-0 mb-1 text-center">                  
+                    <i class="ri-alarm-warning-line display-4 text-body"></i>                   
+                  </div> 
+                  <div class="flex-grow-1 text-center">                                          
+                    <p class="card-text">Καμία Προειδοποίηση</p>                                                                                               
+                  </div>
+                </div>                                                  
+               
+
+              <div class="card-footer text-center">
+                <h4 id="meteoalarm_info" class="float-end"><b><i class="ri-information-line lh-1 ml-1"></i></b></h4>                                    
+                  <h5>
+                    <u>Ευρωπαϊκή Υπηρεσία Προειδοποιήσεων</u>
+                  </h5>
+                  <h4 class="mt-3">
+                    <a href="https://meteoalarm.org/en/live/region/CY" target="_blank" class="link-dark text-body"><b>Meteoalarm</b></a>
+                  </h4>                               
+              </div>
+            </div>
+          </div>
+        </div>
+        <hr/>
+        <div class="row">
+          <div class="col-xxl-12">
+            <h5>Επεξηγήσεις Προειδοποιήσεων</h5>
+            <p><a href="https://dom.org.cy/FORECAST/Weather_warnings_guide_gr.pdf" target="_blank" class="link-primary link-offset-2 text-decoration-underline link-underline-opacity-25 link-underline-opacity-100-hover">Επεξηγηματικός Οδηγός Προειδοποιήσεων</a></p>
+          </div>
+        </div>
+        <div class="row">          
+          <div class="col-xxl-4">
+            <div class="card border card-border-yellow">
+              <div class="card-header">
+                  <h6 class="card-title mb-0">Κίτρινη Προειδοποίηση</h6>
+              </div>
+              <div class="card-body">
+                  <p class="card-text text-justify">
+                    Ο καιρός είναι δυνητικά επικίνδυνος. Τα καιρικά φαινόμενα που έχουν προβλεφθεί δεν είναι ασυνήθιστα, αλλά χρειάζεται προσοχή σχετικά με δραστηριότητες που εκτίθενται σε μετεωρολογικούς κινδύνους. Χρειάζεται συχνή ενημέρωση σχετικά με τις αναμενόμενες καιρικές συνθήκες και αποφυγή αχρείαστων κινδύνων.
+                  </p>                 
+              </div>
+            </div>
+          </div>
+      
+          <div class="col-xxl-4">
+            <div class="card border card-border-orange">
+              <div class="card-header">
+                  <h6 class="card-title mb-0">Πορτοκαλί Προειδοποίηση</h6>
+              </div>
+              <div class="card-body">
+                  <p class="card-text text-justify">
+                    Ο καιρός είναι επικίνδυνος. Ασυνήθιστα καιρικά φαινόμενα έχουν προβλεφθεί. Είναι πιθανό να υπάρξουν ζημιές και θύματα. Χρειάζεται εγρήγορση και τακτική ενημέρωση σχετικά με τις λεπτομέρειες των αναμενόμενων μετεωρολογικών συνθηκών. Μάθετε τους κινδύνους που μπορεί να είναι αναπόφευκτοι. Ακολουθήστε τυχόν συμβουλές που δίνονται από τις αρχές.
+                  </p>                  
+              </div>
+            </div>
+          </div>
+        
+      
+          <div class="col-xxl-4">
+            <div class="card border card-border-red">
+              <div class="card-header">
+                  <h6 class="card-title mb-0">Κόκκινη Προειδοποίηση</h6>
+              </div>
+              <div class="card-body">
+                  <p class="card-text text-justify">
+                    Ο καιρός είναι πολύ επικίνδυνος. Εξαιρετικά έντονα καιρικά φαινόμενα έχουν προβλεφθεί. Πιθανό να προκληθούν μεγάλες ζημιές και ατυχήματα, σε μια ευρεία περιοχή, απειλώντας σε πολλές περιπτώσεις τη ζωή και τη σωματική ακεραιότητα. Να ενημερώνεστε συχνά για τις λεπτομέρειες των αναμενόμενων μετεωρολογικών συνθηκών και κινδύνων. Να ακολουθείτε πάντοτε τις οδηγίες και τυχόν συμβουλές που δίνονται από τις αρχές και να είστε προετοιμασμένοι για ασυνήθιστα μέτρα.
+                  </p>                  
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div><!-- end card -->
+  </div>
+</div>
+
+  
+ 
+
+
+          <button
+            onclick="topFunction()"
+            class="btn btn-danger btn-icon"
+            id="back-to-top"
+          >
+            <i class="ri-arrow-up-line"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <div class="container-fluid">
+        <div class="row align-items-center">
+          <div class="col-sm-3 text-center border-r">
+            <div id="dom" class="align-items-center justify-content-center deps">              
+              <img
+                class="footer_logo mb-4"
+                src="/staticfiles/images/dom.png"
+                alt="Department of Meteorology Logo"
+              />
+              <h4 class="card-title mb-2">Τμήμα Μετεωρολογίας</h4>              
+            </div>           
+
+            <div id="moa" class="align-items-center justify-content-center deps">              
+              <img
+                class="footer_logo mb-4"
+                src="/staticfiles/images/moa.png"
+                alt="Ministry of Agriculture Logo"
+              />
+              <p class="card-title mb-2">Υπό την αιγίδα του Υπουργείου Γεωργίας, Αγροτικής Ανάπτυξης και Περιβάλλοντος</p>              
+            </div>
+
+            <div id="doa_er" class="align-items-center justify-content-center deps">
+              <div class="d-flex align-items-center justify-content-center mb-4">
+                <img
+                  class="footer_logo_md"
+                  src="/staticfiles/images/doa.png"
+                  alt="Department of Agricalture and Eratosthenis Logos"
+                />
+                <img
+                  class="footer_logo ml-1"
+                  src="/staticfiles/images/eratosthenis.png"
+                  alt="Department of Agricalture and Eratosthenis Logos"
+                />
+              </div>                           
+              <p class="card-title mb-2">Σε συνεργασία με το Τμήμα Γεωργίας Κύπρου και το Ερευνητικό Κέντρο Αριστείας Ερατοσθένης</p>              
+            </div>
+          </div>
+
+          <div class="col-sm-6 prl-4 pt-5 pb-5">                    
+            <div class="d-flex mb-2 justify-content-center text-center">              
+              <h4 class="ml-1">Ενημερωτικό Δελτίο Αγρομετεωρολογίας</h4>
+            </div>
+
+            <form id="newsletter_form" action="/" method="POST">
+              <input type="hidden" name="csrfmiddlewaretoken" value="bUvLEobRIjOAPawvkRsC8jGwiH1diuHFaSU3ZzYhj8eAU8Ct1rCPfiAtRklmixpn">                          
+              <div class="input-group">
+                <input id="email" type="email" class="form-control" name="email" aria-label="Email Address" aria-describedby="Email Address" placeholder="Email Address" required>
+                <button class="btn btn-outline-success material-shadow-none" type="submit" id="button-addon2" onclick="">Εγγραφή</button>                          
+              </div>    
+              
+              <div class="form-check form-check-success mb-3">
+                <input id="terms" class="form-check-input" name="ToU_agreement" type="checkbox" required>
+                <label class="form-check-label" for="terms">
+                    Αποδέχομαι τους 
+                    <a href=/terms_conditions target="_blank"> Όρους & Προϋποθέσεις </a>
+                </label>
+              </div>      
+            </form>                              
+          </div>
+
+          <div class="col-sm-3 border-l">
+            <h4 class="mb-3">ΕΠΙΚΟΙΝΩΝΙΑ</h4>
+            <div class="d-flex mb-1">
+              <h4><b><i class="ri-building-line"></i></b></h4>
+              <p class="ml-1">
+                Λεωφόρος Νίκης, 28
+                <br />
+                1086
+                <br />
+                Λευκωσία
+              </p>
+            </div>
+
+            <div class="d-flex mb-1">
+              <h4><b><i class="bx bx-phone-call bx-tada"></i></b></h4>
+              <p class="ml-1">22802934</p>
+            </div>
+            
+            <div class="d-flex mb-1">
+              <h4><b><i class="bx bx-mail-send"></i></b></h4>
+              <p class="ml-1">
+                <a href="mailto:metservice@dom.moa.gov.cy">metservice@dom.moa.gov.cy</a>
+              </p>
+            </div>
+
+            <div class="d-flex mb-1">
+              <h4><b><i class="bx bx-link"></i></b></h4>
+              <p class="ml-1">
+                <a href="https://www.moa.gov.cy/moa/dm/dm.nsf/home/home?openform" target="_blank">Τμήμα Μετεωρολογίας</a>
+              </p>
+            </div>
+          </div>
+        </div>                
+      </div>
+      <hr />
+      <div class="container-fluid">
+        <div class="row">
+          <div class="col-sm-12 text-center">
+            <script>
+              document.write(new Date().getFullYear());
+            </script>
+            © Cyprus Department of Meteorology.
+          </div>
+          
+        </div>
+      </div>
+    </footer>
+
+    <!-- JAVASCRIPT -->
+    <script src="/staticfiles/js/jquery-3.7.1.min.js"></script>
+    <script src="/staticfiles/js/jquery-ui.min.js"></script>
+    <script src="/staticfiles/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="/staticfiles/libs/simplebar/simplebar.min.js"></script>
+    <script src="/staticfiles/libs/node-waves/waves.min.js"></script>
+    <script src="/staticfiles/libs/feather-icons/feather.min.js"></script>
+    <script src="/staticfiles/js/lord-icon-2.1.0.js"></script>
+    <script src="/staticfiles/js/plugins.js"></script>
+
+    <!-- Dashboard init -->
+    <script src="/staticfiles/js/dashboard-analytics.init.js"></script>
+
+    <!-- App js -->
+    <script src="/staticfiles/js/app.js"></script>
+    <script src="/staticfiles/libs/sweetalert2/sweetalert2.min.js"></script>
+
+    <script>
+      $("#newsletter_form").on('submit', function(e) {
+        e.preventDefault();
+
+        email_address = $("#email").val();
+        terms = $("#terms").val();
+        
+        $.ajax({
+          url: '/submit_form',
+          type: 'POST',
+          data: { csrfmiddlewaretoken:"bUvLEobRIjOAPawvkRsC8jGwiH1diuHFaSU3ZzYhj8eAU8Ct1rCPfiAtRklmixpn", email: email_address, terms: terms },
+          success: function(data) {
+            if (data.isSubmited) {
+              Swal.fire({
+                title: "Επιτυχία!",
+                text: "To email σας έχει καταχωρήθει.",
+                icon: "success",
+                customClass: { confirmButton: "btn btn-success w-xs mt-2" },
+                buttonsStyling: !1,
+                showCloseButton: !0,
+              });
+             
+              $("#email").val("");
+              $("#terms").prop('checked', false);;         
+            }
+            else if (!data.isUnique) {
+              Swal.fire({
+                title: "Προσοχή!",
+                text: "Αυτό το email είναι ήδη εγγεγραμμένο για να παραλαμβάνει το ενημερωτικό μας δελτίο.",
+                icon: "warning",
+                customClass: { confirmButton: "btn btn-warning w-xs mt-2" },
+                buttonsStyling: !1,
+                showCloseButton: !0,
+              });              
+            }                    
+            else {
+              Swal.fire({
+                title: "Σφάλμα.",
+                text: "Κάτι πήγε λάθος. Παρακαλώ δοκιμάστε ξανά αργότερα.",
+                icon: "error",
+                customClass: { confirmButton: "btn btn-danger w-xs mt-2" },
+                buttonsStyling: !1,
+                showCloseButton: !0,
+              });                
+            }                           
+          }                
+        });                  
+      }); 
+
+      function updateIndex(index){        
+        if (index == 2)
+          index = 0;
+        else
+          index+=1;
+        
+        return index;
+      }
+      
+      logos = ["dom", "moa", "doa_er"];
+      $(document).ready(function () {        
+        index = 0;
+        $(".deps").hide();
+        $("#" + logos[index]).show();
+        index = updateIndex(index);
+
+        setInterval(function () {                  
+          $(".deps").hide();          
+          $("#" + logos[index]).show();
+          index = updateIndex(index);
+        }, 3000); 
+      });    
+
+    </script>
+
+    
+  <script src="/staticfiles/js/xml_translate.js"></script>
+  <script src="/staticfiles/libs/sweetalert2/sweetalert2.min.js"></script>
+  <script>
+    $(document).ready(function () {            
+      
+        $(".ΚΊΤΡΙΝΟ").css("background-color", "#ffc84b");
+        $(".ΠΟΡΤΟΚΑΛΙ").css("background-color", "#f46906");
+        $(".ΚΌΚΚΙΝΟ").css("background-color", "#fd5353");
+      
+
+      document.getElementById("meteoalarm_info") &&
+      document.getElementById("meteoalarm_info").addEventListener("click", function () {
+        Swal.fire({
+          title: "Meteoalarm",
+          text: "Το MeteoAlarm είναι μια ολοκληρωμένη ενιαία υπηρεσία για υδρομετεωρολογικές προειδοποιήσεις, παρέχοντας τις πιο σχετικές πληροφορίες που απαιτούνται για την προετοιμασία για ακραία καιρικά φαινόμενα που αναμένεται να συμβούν στην Ευρώπη.",
+          icon: "info",
+          customClass: { confirmButton: "btn btn-primary w-xs mt-2" },
+          buttonsStyling: !1,
+          showCloseButton: !0,
+        });
+      })
+    });
+  </script>
+
+  </body>
+</html>

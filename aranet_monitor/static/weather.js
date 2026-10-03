@@ -283,12 +283,8 @@
 
   async function loadMarine() {
     marine = await getJSON("/api/weather/marine");
-    const w = marine.warnings && marine.warnings.text;
     const f = marine.forecast;
-    const seaWarn = f && f.warnings && !/^nil$/i.test(f.warnings.trim()) ? `Море: ${f.warnings}` : "";
-    const banner = [w && `⚠ Предупреждение метеослужбы:\n${w}`, seaWarn && `⚠ ${seaWarn}`].filter(Boolean).join("\n\n");
-    $("warn-banner").textContent = banner;
-    $("warn-banner").classList.toggle("hidden", !banner);
+    renderAlerts(marine.alerts || [], marine.warnings && marine.warnings.text, f);
     if (!f) { $("sea").textContent = "данных пока нет — запусти aranet-dom forecast"; return; }
     const coasts = Object.entries(f.areas || {}).map(([coast, rows]) => rows.map((r, i) =>
       `<tr>${i === 0 ? `<td rowspan="${rows.length}"><b>${esc(coast)}</b></td>` : ""}<td>${esc(r[0])}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join("")).join("");
@@ -305,6 +301,42 @@
       ${coasts ? `<details><summary class="note" style="cursor:pointer">Ветер и волнение по побережьям</summary>
         <div class="scroll"><table class="coast"><tr><th>Побережье</th><th>Когда</th><th>Ветер</th><th>Волнение</th></tr>${coasts}</table></div></details>` : ""}`;
     renderSst();
+  }
+
+  // Meteoalarm awareness types and levels
+  const ALERT_TYPES = { 1: "сильный ветер", 2: "снег, гололёд", 3: "грозы", 4: "туман", 5: "жара", 6: "холод",
+    7: "явления на побережье", 8: "пожароопасность", 9: "лавины", 10: "сильный дождь", 12: "паводки", 13: "дождь и паводки" };
+  const ALERT_LEVELS = { 2: ["🟡", "Жёлтое"], 3: ["🟠", "Оранжевое"], 4: ["🔴", "Красное"] };
+  // the Department writes descriptions in capitals: make them readable
+  const sentenceCase = t => (t || "").toLowerCase().replace(/(^\s*|[.!?]\s+)([a-zа-яё])/g, (m, p1, c) => p1 + c.toUpperCase());
+
+  function renderAlerts(alerts, agrometText, f) {
+    const now = Date.now() / 1000;
+    const span = a => {
+      const sameDay = new Date(a.onset * 1000).toDateString() === new Date(a.expires * 1000).toDateString();
+      const end = sameDay ? new Date(a.expires * 1000 + 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : fmtTime(a.expires * 1000 + 1000);
+      return `${fmtTime(a.onset * 1000)} – ${end}`;
+    };
+    // in force first, then upcoming; within each, the most severe first
+    const items = alerts.sort((a, b) => (a.onset > now) - (b.onset > now) || (b.level || 0) - (a.level || 0) || a.onset - b.onset).map(a => {
+      const [icon, level] = ALERT_LEVELS[a.level] || ["⚠", ""];
+      const what = ALERT_TYPES[a.type] || esc(a.event);
+      const when = a.onset > now ? `начнётся через ${Math.max(1, Math.round((a.onset - now) / 3600))} ч` : "действует сейчас";
+      return `<div class="alert lvl${a.level || 0}">
+        <div class="alert-title">${icon} ${level} предупреждение: ${what}</div>
+        <div class="alert-when">${span(a)} · ${when}${a.areas && a.areas !== "Cyprus" ? " · " + esc(a.areas) : ""}</div>
+        <div class="alert-text">${esc(sentenceCase(a.description))}</div>
+        ${a.instruction || a.description_el ? `<details><summary>что делать и оригинал</summary>
+          ${a.instruction ? `<p>${esc(sentenceCase(a.instruction))}</p>` : ""}
+          ${a.description_el ? `<p lang="el">${esc(a.description_el)}</p>` : ""}</details>` : ""}
+      </div>`;
+    });
+    // agromet's own card, if it shows something Meteoalarm doesn't have
+    if (!items.length && agrometText) items.push(`<div class="alert lvl0"><div class="alert-title">⚠ Предупреждение метеослужбы</div><div class="alert-text" lang="el">${esc(agrometText)}</div></div>`);
+    if (f && f.warnings && !/^nil$/i.test(f.warnings.trim()))
+      items.push(`<div class="alert lvl0"><div class="alert-title">⚠ Море</div><div class="alert-text">${esc(f.warnings)}</div></div>`);
+    $("warn-banner").innerHTML = items.join("");
+    $("warn-banner").classList.toggle("hidden", !items.length);
   }
 
   function renderSst() {

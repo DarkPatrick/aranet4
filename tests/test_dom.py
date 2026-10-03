@@ -66,14 +66,57 @@ def test_store_sea_and_marine(tmp_path):
 
 def test_warnings_store_only_changes(tmp_path):
     conn = dom.connect(str(tmp_path / "w.db"))
-    empty = b"<HTML>\n<H1>ISSUED WEATHER WARNINGS</H1>\n</HTML>\n"
-    assert dom.parse_warnings(empty) == ""
+    page = (FIX / "agromet_warnings_none.html").read_text(encoding="utf-8")
+    assert dom.parse_warnings(page.encode()) == ""
     assert dom.store_warnings(conn, "", now=100)
     assert not dom.store_warnings(conn, "", now=200)
-    yellow = dom.parse_warnings(b"<H1>ISSUED WEATHER WARNINGS</H1><p>YELLOW WARNING: thunderstorms</p>")
-    assert yellow == "YELLOW WARNING: thunderstorms"
+    yellow = dom.parse_warnings(page.replace(dom.NO_WARNINGS, "Κίτρινη Προειδοποίηση για καταιγίδες").encode())
+    assert yellow == "Κίτρινη Προειδοποίηση για καταιγίδες"
     assert dom.store_warnings(conn, yellow, now=300)
     assert dom.marine(conn)["warnings"] == {"ts": 300, "text": yellow}
+    assert dom.parse_warnings(b"<html>redesigned page</html>") == ""
+
+
+# ---------- Meteoalarm ----------
+
+def test_parse_meteoalarm():
+    alerts = dom.parse_meteoalarm((FIX / "meteoalarm_cy.json").read_bytes())
+    assert len(alerts) == 3
+    a = alerts[-1]
+    assert (a["level"], a["type"], a["event"], a["msg_type"]) == (2, 3, "Thunderstorm Yellow", "Alert")
+    assert a["onset"] == local(2026, 10, 2, 10) and a["expires"] == local(2026, 10, 2, 16, 59) + 59
+    assert a["description"].startswith("ISOLATED HEAVY THUNDERSTORMS") and a["description_el"].startswith("ΜΕΜΟΝΩΜΕΝΕΣ")
+    assert a["areas"] == "Cyprus"
+
+
+def test_active_alerts(tmp_path):
+    conn = dom.connect(str(tmp_path / "w.db"))
+    alerts = dom.parse_meteoalarm((FIX / "meteoalarm_cy.json").read_bytes())
+    dom.store_alerts(conn, alerts)
+    dom.store_alerts(conn, alerts)  # re-polled feed: no duplicates
+    assert [a["identifier"] for a in dom.active_alerts(conn, now=local(2026, 10, 2, 12))] == [alerts[-1]["identifier"]]
+    # issued in the morning for the afternoon: shown before it starts
+    assert len(dom.active_alerts(conn, now=local(2026, 10, 2, 8))) == 1
+    assert dom.active_alerts(conn, now=local(2026, 10, 3)) == []
+    # an update replaces the original, a cancel removes it
+    upd = dict(alerts[-1], identifier="X.update", msg_type="Update", refs=alerts[-1]["identifier"], level=3)
+    dom.store_alerts(conn, [upd])
+    act = dom.active_alerts(conn, now=local(2026, 10, 2, 12))
+    assert [(a["identifier"], a["level"]) for a in act] == [("X.update", 3)]
+    dom.store_alerts(conn, [dict(upd, identifier="X.cancel", msg_type="Cancel", refs="X.update")])
+    assert dom.active_alerts(conn, now=local(2026, 10, 2, 12)) == []
+
+
+def test_meteoalarm_references_parsed():
+    raw = json.dumps({"warnings": [{"alert": {
+        "identifier": "B", "msgType": "Update", "sent": "2026-10-02T09:00:00+03:00",
+        "references": "sender,A,2026-10-01T09:00:00+03:00",
+        "info": [{"language": "en-GB", "event": "Wind Yellow", "parameter": [
+            {"valueName": "awareness_level", "value": "2; yellow; Moderate"}, {"valueName": "awareness_type", "value": "1; Wind"}],
+            "onset": "2026-10-02T10:00:00+03:00", "expires": "2026-10-02T20:00:00+03:00", "area": [{"areaDesc": "Cyprus"}]}],
+    }}]}).encode()
+    a = dom.parse_meteoalarm(raw)[0]
+    assert (a["refs"], a["type"], a["level"]) == ("A", 1, 2)
 
 
 # ---------- climate archive ----------

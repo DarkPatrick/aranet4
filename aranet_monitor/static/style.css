@@ -75,8 +75,6 @@ select.station { min-width: 220px; font-weight: 600; }
 .leaflet-control-attribution a { color: var(--muted); }
 
 h2 { font-size: 16px; margin: 22px 0 8px; }
-.banner { background: #fdecc8; color: #5a3b00; border: 1px solid #e3b42b; border-radius: 10px; padding: 10px 14px; margin: 10px 0; white-space: pre-line; font-weight: 600; }
-@media (prefers-color-scheme: dark) { .banner { background: #3a2d0a; color: #f3d27a; border-color: #8a6d16; } }
 img.radar { display: block; max-width: 100%; margin: 10px auto 0; border-radius: 6px; }
 table.coast { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
 table.coast th, table.coast td { padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
@@ -84,3 +82,20 @@ table.coast th { color: var(--muted); font-weight: 600; background: var(--head);
 .sea-text { margin: 6px 0; }
 table.coast td:nth-child(n) { min-width: 70px; }
 @media (max-width: 600px) { table.coast { font-size: 12px; } }
+
+/* weather warnings (Meteoalarm levels) */
+.banner { margin: 10px 0; display: grid; gap: 8px; }
+.alert { border-radius: 10px; padding: 10px 14px; border: 1px solid; border-left-width: 6px; }
+.alert-title { font-weight: 700; }
+.alert-when { font-size: 13px; opacity: .85; margin-top: 2px; }
+.alert-text { margin-top: 6px; }
+.alert details { margin-top: 6px; font-size: 13px; }
+.alert summary { cursor: pointer; opacity: .8; }
+.alert.lvl2, .alert.lvl0 { background: #fff6d6; border-color: #e3b42b; color: #4a3900; }
+.alert.lvl3 { background: #ffe6cc; border-color: #e07b1a; color: #4d2600; }
+.alert.lvl4 { background: #fde0e0; border-color: #d32f2f; color: #5a0d0d; }
+@media (prefers-color-scheme: dark) {
+  .alert.lvl2, .alert.lvl0 { background: #3a3110; border-color: #b8901c; color: #f6df8f; }
+  .alert.lvl3 { background: #3d2610; border-color: #d0741a; color: #f7c58f; }
+  .alert.lvl4 { background: #3d1515; border-color: #d04545; color: #f5b3b3; }
+}
