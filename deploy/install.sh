@@ -11,7 +11,7 @@ cd "$DIR"
 echo "==> system packages"
 APT="sudo apt-get -o DPkg::Lock::Timeout=900"  # wait for unattended-upgrades instead of failing
 $APT update -qq
-$APT install -y -qq python3-venv bluez poppler-utils
+$APT install -y -qq python3-venv bluez
 # Raspberry Pi needs pi-bluetooth to bring up the onboard BT chip; harmless to skip elsewhere
 $APT install -y -qq pi-bluetooth 2>/dev/null || true
 sudo systemctl enable --now bluetooth

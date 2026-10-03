@@ -152,3 +152,13 @@ def test_api_climate_and_net(tmp_path):
         assert rd["net"] == [st["ACHNA"]["latest"]["net"]]
     finally:
         srv.shutdown()
+
+
+def test_pdf_with_overdrawn_row_march_2016():
+    """the 20th is drawn twice on top of itself; old poppler lost that day"""
+    text = dom.pdf_to_text((FIX / "climate_2016_03.pdf").read_bytes())
+    rows = dom.parse_climate(text, 2016, 3)
+    assert len(rows) == 6 * 31
+    d20 = {r["name"]: r for r in rows if r["date"] == "2016-03-20"}
+    assert (d20["Pafos Airport"]["tmax"], d20["Pafos Airport"]["tmin"]) == (20.4, 11.5)
+    assert d20["New Limassol Port"]["tmax"] == 22.9

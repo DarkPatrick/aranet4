@@ -24,7 +24,7 @@ chown aranet:aranet /home/aranet/.ssh/authorized_keys; chmod 600 /home/aranet/.s
 
 echo "==> app"
 APT="apt-get -o DPkg::Lock::Timeout=900"
-$APT install -y -qq python3-venv rsync nginx poppler-utils >/dev/null
+$APT install -y -qq python3-venv rsync nginx >/dev/null
 # nginx must not take port 80: certbot renews with its standalone server there
 rm -f /etc/nginx/sites-enabled/default
 python3 -m venv "$DIR/.venv"

@@ -4,7 +4,7 @@
   synopsis, visibility, warnings, wind / sea state per coast;
 * issued weather warnings page (empty when there are none);
 * daily climatological archive since 2016: monthly PDFs with Tmax / Tmin /
-  precipitation for 5-7 main stations (parsed with `pdftotext -layout`).
+  precipitation for 5-7 main stations (laid out as text with pdfplumber).
 
     aranet-dom forecast        # sea forecasts + warnings (timer: every 30 min)
     aranet-dom climate         # new / recent monthly archive PDFs (timer: daily)
@@ -16,9 +16,7 @@ import json
 import logging
 import re
 import sqlite3
-import subprocess
 import sys
-import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -268,11 +266,38 @@ def pdf_month(url: str) -> tuple[int, int] | None:
     return (int(m.group(2)), int(m.group(1))) if m else None
 
 
-def pdf_to_text(data: bytes) -> str:
-    with tempfile.NamedTemporaryFile(suffix=".pdf") as f:
-        f.write(data)
-        f.flush()
-        return subprocess.run(["pdftotext", "-layout", f.name, "-"], check=True, capture_output=True, text=True).stdout
+def pdf_to_text(data: bytes, char_width: float = 4.0) -> str:
+    """Layout text of a PDF, like `pdftotext -layout`, but the same on every machine.
+
+    Some archive PDFs draw a table row twice on top of itself (a fake-bold effect);
+    older poppler (Ubuntu 24.04) then scatters that row over several lines and the
+    day is lost. pdfplumber's dedupe_chars() removes the overlay; words are placed
+    back on a character grid by their x position so columns stay aligned."""
+    import io
+
+    import pdfplumber
+
+    out = []
+    with pdfplumber.open(io.BytesIO(data)) as pdf:
+        for page in pdf.pages:
+            words = page.dedupe_chars().extract_words(keep_blank_chars=False, use_text_flow=False)
+            rows: list[list[dict]] = []
+            for w in sorted(words, key=lambda w: (w["top"], w["x0"])):
+                if rows and abs(rows[-1][0]["top"] - w["top"]) <= 3:
+                    rows[-1].append(w)
+                else:
+                    rows.append([w])
+            for row in rows:
+                line, prev = "", None
+                for w in sorted(row, key=lambda w: w["x0"]):
+                    if prev is not None and w["x0"] - prev["x1"] < 6:
+                        col = len(line) + 1  # same phrase ("Pafos Airport"): one space
+                    else:  # next cell: place by x, at least two spaces apart
+                        col = max(round(w["x0"] / char_width), len(line) + 2 if line else 0)
+                    line = line.ljust(col) + w["text"]
+                    prev = w
+                out.append(line)
+    return "\n".join(out)
 
 
 def _cell(token: str | None):
@@ -386,7 +411,7 @@ def collect_climate(db_path: str, refresh_months: int = 2, pause: float = 1.0) -
                 continue
             try:
                 rows = parse_climate(pdf_to_text(get(url, timeout=60)), *ym)
-            except (urllib.error.URLError, TimeoutError, OSError, subprocess.CalledProcessError) as exc:
+            except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
                 log.warning("%s: %s", url, exc)
                 continue
             n = store_climate(conn, rows)
