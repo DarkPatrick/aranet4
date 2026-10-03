@@ -35,6 +35,43 @@
     $("table-link").href = b.table_image;
   }
 
+  const num = (v, d = 0) => v == null ? "–" : v.toLocaleString("ru-RU", { minimumFractionDigits: d, maximumFractionDigits: d });
+  const signed = (v, d) => (v > 0 ? "+" : v < 0 ? "−" : "") + num(Math.abs(v), d);
+  const monthName = (y, m) => new Date(y, m - 1, 1).toLocaleDateString("ru-RU", { month: "long" });
+  const ru = t => t && (t.ru || t.el);
+  const lang = t => t && !t.ru ? ' lang="el"' : "";
+
+  function renderClimate(c) {
+    const s = c && c.seasonal, m = c && c.monthly;
+    $("season-h").classList.toggle("hidden", !s);
+    $("season").classList.toggle("hidden", !s);
+    if (s) {
+      const p = (s.period || "").match(/^(\d{4})-(\d{2})\.\.(\d{2})$/);
+      if (p) $("season-h").textContent = `Сезонный прогноз: ${monthName(+p[1], +p[2])} – ${monthName(+p[1], +p[3])} ${p[1]}`;
+      $("season").innerHTML = `<p${lang(s.summary)}>${esc(ru(s.summary))}</p>
+        <div class="note">Тенденция по ансамблю сезонных моделей Copernicus C3S, отклонения — от средних за 1993–2016. Это общий характер сезона, а не прогноз конкретных дней. <a href="${esc(s.url)}" target="_blank" rel="noopener">Полный документ (PDF, по-гречески)</a></div>`;
+    }
+    $("month-h").classList.toggle("hidden", !m);
+    $("month").classList.toggle("hidden", !m);
+    if (m) {
+      const p = (m.period || "").match(/^(\d{4})-(\d{2})$/);
+      if (p) $("month-h").textContent = `Прошлый месяц: ${monthName(+p[1], +p[2])} ${p[1]}`;
+      const tile = (label, value, sub) => `<div class="tile"><div class="label">${label}</div><div class="value">${value}</div>${sub ? `<div class="note" style="margin:0">${sub}</div>` : ""}</div>`;
+      const tiles = [
+        m.temp_anomaly != null && tile("Температура", `${signed(m.temp_anomaly, 2)}<span class="unit">°C</span>`, "к норме 1981–2010"),
+        m.rain_mm != null && tile("Осадки за месяц", `${num(m.rain_mm)}<span class="unit">мм</span>`, m.rain_pct != null ? `${num(m.rain_pct)} % нормы 1961–1990` : ""),
+        m.season_rain_mm != null && tile("С октября (гидрологический год)", `${num(m.season_rain_mm)}<span class="unit">мм</span>`, m.season_rain_pct != null ? `${num(m.season_rain_pct)} % нормы` : ""),
+      ].filter(Boolean).join("");
+      const sec = m.sections || {};
+      const more = [["events", "Заметные явления"], ["rain", "Осадки"], ["temperature", "Температура"]]
+        .filter(([k]) => sec[k] && sec[k].el)
+        .map(([k, title]) => `<details><summary class="note" style="cursor:pointer">${title}</summary><p${lang(sec[k])}>${esc(ru(sec[k]))}</p></details>`).join("");
+      $("month").innerHTML = `<div class="tiles" style="margin:0 0 8px">${tiles}</div>
+        ${sec.general ? `<p${lang(sec.general)}>${esc(ru(sec.general))}</p>` : ""}${more}
+        <div class="note">Ежемесячный бюллетень метеослужбы. <a href="${esc(m.url)}" target="_blank" rel="noopener">Полный документ (PDF, по-гречески)</a></div>`;
+    }
+  }
+
   async function load() {
     try {
       data = await (await fetch("/api/weather/forecast", { cache: "no-store" })).json();
@@ -47,6 +84,7 @@
     if (!current) current = data.bulletins[0].issue; // newest
     $("map-img").src = `${data.map_image}?v=${data.bulletins[0].issued}`;
     render();
+    renderClimate(data.climate);
   }
 
   load();
