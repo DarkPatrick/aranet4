@@ -183,7 +183,12 @@ def translate_sentence(conn, src: str, providers=None) -> tuple[str | None, str 
         if len(pieces) > 1:
             outs = [translate_sentence(conn, p, providers) for p in pieces]
             if all(o[0] for o in outs):
-                return " ".join(o[0] for o in outs), outs[0][1]
+                joined, provider = " ".join(o[0] for o in outs), outs[0][1]
+                # cache the whole sentence too: the dashboard looks sentences up whole
+                with conn:
+                    conn.execute("INSERT OR REPLACE INTO translations (hash, source, target, provider, created) VALUES (?, ?, ?, ?, ?)",
+                                 (h, src, joined, provider, int(time.time())))
+                return joined, provider
     for name, fn in providers:
         try:
             out = _fix(fn(src).strip())

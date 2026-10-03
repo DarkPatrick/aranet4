@@ -86,3 +86,16 @@ def test_api_forecast_without_tables(tmp_path):
         assert d["bulletins"] == []
     finally:
         srv.shutdown()
+
+
+def test_long_sentence_split_is_cached_whole(tmp_path):
+    conn = forecast.connect(str(tmp_path / "w.db"))
+    long = ", ".join(["Οι άνεμοι θα πνέουν ασθενείς μέχρι μέτριοι 3 με 4 Μποφόρ"] * 6) + "."
+    assert len(long.encode()) > 480
+    calls = []
+    t, _ = forecast.translate_sentence(conn, long, [("fake", lambda x, target="ru": calls.append(x) or "кусок")])
+    assert len(calls) > 1 and t.startswith("кусок")
+    # what latest() does: whole-sentence lookup
+    import hashlib
+    row = conn.execute("SELECT target FROM translations WHERE hash = ?", (hashlib.sha1(long.encode()).hexdigest(),)).fetchone()
+    assert row and row[0] == t
