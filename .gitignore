@@ -440,3 +440,4 @@ data/
 *.db-wal
 *.db-shm
 config.env
+dashboard-password.txt
