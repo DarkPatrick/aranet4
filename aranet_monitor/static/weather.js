@@ -143,6 +143,13 @@
       : "нет данных";
   }
 
+  // "Всё" spans both sources: the station's history and the home sensor's
+  let homeFirst = null;
+  function setBounds(st) {
+    const firsts = [st.first, homeFirst].filter(Boolean);
+    periods.setBounds(firsts.length ? Math.min(...firsts) * 1000 : null);
+  }
+
   function select(code) {
     if (!byCode[code]) return;
     selected = code;
@@ -150,7 +157,7 @@
     $("station").value = code;
     drawMarkers();
     setTilesFor(byCode[code]);
-    periods.setBounds(byCode[code].first ? byCode[code].first * 1000 : null);
+    setBounds(byCode[code]);
     loadCharts().catch(fail);
   }
 
@@ -233,7 +240,9 @@
     fillSelect();
     drawMarkers();
     setTilesFor(byCode[selected]);
-    periods.setBounds(byCode[selected].first ? byCode[selected].first * 1000 : null);
+    const latest = await getJSON("/api/latest");
+    homeFirst = latest.range && latest.range.first ? latest.range.first : null;
+    setBounds(byCode[selected]);
     return true;
   }
 
