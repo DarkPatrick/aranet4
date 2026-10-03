@@ -95,3 +95,23 @@ def test_old_addresses_redirect(server, old, new):
         opener.open(server + old)
     assert exc.value.code == 302 and exc.value.headers["Location"] == new
     assert get(server + old)[0] == 200  # a browser just follows it
+
+
+def test_pressure_offset(tmp_path):
+    from aranet_monitor import dom, weather
+    now = int(time.time())
+    a_path, w_path = str(tmp_path / "a.db"), str(tmp_path / "w.db")
+    conn = db.connect(a_path)
+    db.insert_readings(conn, [db.Reading(now - k * 300, 600, 21.0, 50.0, 1010.0) for k in range(24)])
+    conn.close()
+    assert dashboard.pressure_offset(a_path, w_path) == {"offset": None, "stations": 0}
+    wx = dom.connect(w_path)
+    rows = []
+    for k in range(12):
+        base = {c: None for c in weather.VALUE_COLUMNS}
+        rows.append({**base, "station": "A", "ts": now - k * 600, "p_msl": 1014.0, "extra": None})
+        rows.append({**base, "station": "B", "ts": now - k * 600, "p_qnh": 1015.0, "extra": None})
+        rows.append({**base, "station": "C", "ts": now - k * 600, "p_station": 830.0, "extra": None})  # mountain: ignored
+    weather.store(wx, [("A", 35, 33), ("B", 35, 33), ("C", 35, 33)], rows)
+    wx.close()
+    assert dashboard.pressure_offset(a_path, w_path) == {"offset": 4.5, "stations": 2}

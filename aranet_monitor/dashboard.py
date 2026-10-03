@@ -6,6 +6,7 @@ GET /static/<file>        -> static assets (echarts is vendored, works offline)
 GET /api/readings?hours=N -> readings for the last N hours (no param: everything)
 GET /api/readings?from=T&to=T -> readings in [from, to], unix seconds, either bound optional
 GET /api/latest           -> latest reading + device status
+GET /api/pressure-offset  -> how far the home sensor reads below sea-level pressure (hPa), from nearby stations
 GET /api/weather/stations -> stations with coordinates and latest observation
 GET /api/weather/readings?station=CODE&from=T&to=T -> one station's observations (+ NET "feels like")
 GET /api/weather/marine   -> latest sea forecast, sea surface temperature history, current warnings
@@ -57,6 +58,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._readings(parse_qs(url.query))
             elif url.path == "/api/latest":
                 self._json(self._with_db(db.latest))
+            elif url.path == "/api/pressure-offset":
+                self._json(pressure_offset(self.db_path, self.weather_db))
             elif url.path in ("/weather/outdoor", "/weather/outdoor/"):
                 self._file(STATIC_DIR / "weather.html")
             elif url.path == "/api/weather/stations":
@@ -159,6 +162,39 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+
+
+def pressure_offset(db_path: str, weather_db: str, days: int = 7, max_gap: int = 400) -> dict:
+    """Sea-level pressure minus the home reading, in hPa: the sensor measures at the
+    flat's altitude (~8 m per hPa). Median over stations that report sea-level
+    pressure (MSL or QNH) of the median paired difference, so one odd station or a
+    passing front doesn't move it."""
+    import bisect
+    import statistics
+
+    since = int(time.time()) - days * 86400
+    home_conn = db.connect_readonly(db_path)
+    wx_conn = db.connect_readonly(weather_db, empty=dom.connect)
+    try:
+        home = home_conn.execute("SELECT ts, pressure FROM readings WHERE ts >= ? AND pressure IS NOT NULL ORDER BY ts", (since,)).fetchall()
+        ts = [r[0] for r in home]
+        per_station = []
+        rows = wx_conn.execute(
+            "SELECT station, ts, COALESCE(p_msl, p_qnh) FROM observations"
+            " WHERE ts >= ? AND COALESCE(p_msl, p_qnh) IS NOT NULL ORDER BY station, ts", (since,)).fetchall()
+        by_station: dict[str, list[float]] = {}
+        for station, t, p in rows:
+            i = bisect.bisect_left(ts, t)
+            best = min((j for j in (i - 1, i) if 0 <= j < len(ts)), key=lambda j: abs(ts[j] - t), default=None)
+            if best is not None and abs(ts[best] - t) <= max_gap:
+                by_station.setdefault(station, []).append(p - home[best][1])
+        per_station = [statistics.median(d) for d in by_station.values() if len(d) >= 3]
+    finally:
+        home_conn.close()
+        wx_conn.close()
+    if not per_station:
+        return {"offset": None, "stations": 0}
+    return {"offset": round(statistics.median(per_station), 1), "stations": len(per_station)}
 
 
 def make_server(host: str, port: int, db_path: str, weather_db: str = "data/weather.db") -> ThreadingHTTPServer:

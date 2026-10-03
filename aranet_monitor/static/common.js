@@ -261,11 +261,39 @@ window.UI = (() => {
     if (canZoom) chart.dispatchAction({ type: "dataZoom", start: 0, end: 100 });
   }
 
+  // ---------- pressure ----------
+  const HPA_TO_MM = 0.750062;
+  // sea-level pressure, hPa (normal 1013.25 hPa = 760 mmHg); Cyprus usually sits 1005-1020
+  // [upper bound, short label for the chart margin, full description]
+  const PRESSURE_SCALE = [
+    [987, "глуб. циклон", "глубокий циклон, шторм"], [1000, "циклон", "циклон, ненастье"],
+    [1009, "пониженное", "пониженное"], [1017, "норма", "нормальное"],
+    [1027, "повышенное", "повышенное, антициклон"], [Infinity, "высокое", "высокое, антициклон"],
+  ];
+  const pressureLabel = seaHpa => PRESSURE_SCALE.find(([to]) => seaHpa < to)[2];
+  // bands in display units for a sensor that reads `offset` hPa below sea level
+  function pressureBands(offset = 0, factor = 1) {
+    return PRESSURE_SCALE.map(([to, name], i) => ({  // short name: it has to fit the right margin
+      from: ((i ? PRESSURE_SCALE[i - 1][0] : -Infinity) - offset) * factor,
+      to: (to - offset) * factor, label: name,
+    }));
+  }
+  // WMO pressure tendency over 3 hours
+  function tendency(d3h) {
+    const a = Math.abs(d3h), dir = d3h > 0 ? "растёт" : "падает";
+    if (a < 0.5) return "стабильно";
+    if (a < 1.6) return `медленно ${dir}`;
+    if (a < 3.6) return dir;
+    if (a < 6) return `быстро ${dir}`;
+    return `очень быстро ${dir}`;
+  }
+
   // Shaded horizontal reference bands with names, from 0 up to the band holding the
   // highest value in view (so a calm week isn't drawn on a 0-33 m/s axis).
   // bands: [{to: upper bound, label}], ascending; the last `to` may be Infinity.
   function bandsOption(bands, sets, key, seriesB) {
     const vals = [sets.b, sets.a].filter(Boolean).flatMap(s => s[key]).filter(v => v != null);
+    if (bands[0].from !== undefined) return rangeBands(bands, vals, seriesB);
     const hi = vals.length ? Math.max(...vals) : 0;
     let n = bands.findIndex(b => hi < b.to);
     n = n < 0 ? bands.length - 1 : n;
@@ -283,6 +311,23 @@ window.UI = (() => {
     return { yAxis: { min: 0, max: top } };
   }
 
+  // Bands with explicit {from, to} that don't start at zero (pressure): the axis
+  // follows the data, and only the bands crossing it are drawn, clipped to it.
+  function rangeBands(bands, vals, seriesB) {
+    if (!vals.length) return {};
+    const lo = Math.min(...vals), hi = Math.max(...vals), pad = Math.max(1, (hi - lo) * 0.15);
+    const view = [Math.floor(lo - pad), Math.ceil(hi + pad)];
+    seriesB.markArea = {
+      silent: true,
+      data: bands.map((b, i) => [b, i]).filter(([b]) => b.to > view[0] && b.from < view[1]).map(([b, i]) => [{
+        yAxis: Math.max(b.from, view[0]),
+        itemStyle: { color: i % 2 ? css("--band") : "transparent" },
+        label: { show: true, position: "right", distance: 6, color: css("--muted"), fontSize: 10, formatter: b.label },
+      }, { yAxis: Math.min(b.to, view[1]) }]),
+    };
+    return { yAxis: { min: view[0], max: view[1] } };
+  }
+
   // One metric, B solid + A dashed (shifted onto B). `bar: true` draws sums per bucket.
   class SeriesChart {
     constructor(el, m) {
@@ -298,7 +343,7 @@ window.UI = (() => {
       const b = nearest(this.sets.b, m.key, t, gap), a = nearest(this.sets.a, m.key, t, gap);
       const when = ms => m.bar && this.step >= MONTH ? fmtMonth(ms)
         : m.daily || (m.bar && this.step >= DAY) ? fmtDay(ms) : fmtTime(ms);
-      const extra = v => m.describe ? ` <span style="color:${css("--muted")}">${m.describe(v)}</span>` : "";
+      const extra = v => m.describe ? `<div style="color:${css("--muted")};margin-left:16px">${m.describe(v)}</div>` : "";
       const line = (p, color, label, at) => p && p.v != null
         ? `<div>${dot(color)}${label} ${when(at)}: <b>${num(p.v, m.digits)} ${m.unit}</b>${extra(p.v)}</div>` : "";
       // "B"/"A" only mean something when there is a comparison
@@ -387,6 +432,6 @@ window.UI = (() => {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => charts.forEach(c => c.applyTheme()));
   }
 
-  return { zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
+  return { HPA_TO_MM, pressureLabel, pressureBands, tendency, zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
            Periods, toMs, nearest, typicalStep, stats, renderCompareTable, SeriesChart, linkCharts };
 })();

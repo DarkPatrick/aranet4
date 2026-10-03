@@ -15,7 +15,7 @@
     <div class="tile co2" id="tile-co2"><div class="label">CO₂</div><div class="value"><span id="v-co2">–</span><span class="unit">ppm</span></div></div>
     <div class="tile"><div class="label">Температура</div><div class="value"><span id="v-temp">–</span><span class="unit">°C</span></div></div>
     <div class="tile"><div class="label">Влажность</div><div class="value"><span id="v-hum">–</span><span class="unit">%</span></div></div>
-    <div class="tile"><div class="label">Давление</div><div class="value"><span id="v-pres">–</span><span class="unit">hPa</span></div></div>
+    <div class="tile"><div class="label">Давление</div><div class="value"><span id="v-pres">–</span><span class="unit">мм рт. ст.</span></div><div class="note" id="v-pres-sub" style="margin:0"></div></div>
     <div class="tile"><div class="label">Батарея</div><div class="value"><span id="v-bat">–</span><span class="unit">%</span></div></div>
   </div>
 
@@ -30,6 +30,7 @@
   <div class="chart" id="c-temp"></div>
   <div class="chart" id="c-hum"></div>
   <div class="chart" id="c-pres"></div>
+  <div class="note" id="pres-note"></div>
 </div>
 
 <script src="/static/echarts.min.js"></script>

@@ -1,5 +1,5 @@
 (() => {
-  const { zoomOptions, armZoom, resetZoom, SPARSE, DAY, css, $, store, fmtTime, fmtDay, fmtRange, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
+  const { HPA_TO_MM, pressureLabel, pressureBands, zoomOptions, armZoom, resetZoom, SPARSE, DAY, css, $, store, fmtTime, fmtDay, fmtRange, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
   const REFRESH_MS = 5 * 60 * 1000;
   const STALE_S = 3600;
   const prefs = store("weather");
@@ -32,7 +32,7 @@
       rows: ["sum", { label: "макс. за 10 мин", get: s => s.max }] },
     { key: "wind", el: "c-wind", title: "Ветер, м/с", unit: "м/с", digits: 1, color: "--wind", zeroBased: true, rows: ["mean", "max"],
       bands: BEAUFORT, describe: beaufort },
-    { key: "pres", el: "c-pres", title: "Давление, hPa", unit: "hPa", digits: 1, color: "--pres", rows: ["mean", "min", "max"] },
+    { key: "pres", el: "c-pres", title: "Давление, гПа", unit: "гПа", digits: 1, color: "--pres", rows: ["mean", "min", "max"] },
     { key: "rad_global", el: "c-rad", title: "Солнечная радиация, W/m²", unit: "W/m²", digits: 0, color: "--rad", zeroBased: true, rows: ["mean", "max"] },
     { key: "snow", el: "c-snow", title: "Снег, см", unit: "см", digits: 0, color: "--hum", zeroBased: true, rows: ["mean", "max"] },
   ];
@@ -209,7 +209,14 @@
     const has = m => m.key === "wind" ? !!w : m.key === "pres" ? !!p : st.metrics.includes(m.key);
     METRICS.forEach((m, i) => {
       if (m.key === "wind" && w) m.title = `${w[1]}, м/с`;
-      if (m.key === "pres" && p) m.title = `${p[1]}, hPa`;
+      if (m.key === "pres" && p) {
+        m.title = `${p[1]}, гПа`;
+        // the "normal / cyclone / anticyclone" scale only makes sense for sea-level pressure;
+        // station-level pressure on a mountain (Troodos ~830 hPa) is just altitude
+        const seaLevel = p[0] !== "p_station";
+        m.bands = seaLevel ? pressureBands(0) : null;
+        m.describe = hpa => `${num(hpa * HPA_TO_MM, 1)} мм рт. ст.${seaLevel ? " · " + pressureLabel(hpa) : ""}`;
+      }
       charts[i].show(has(m));
       if (has(m)) { charts[i].applyTheme(); charts[i].set(setB, setA, offset, b, { fit: fitAll() }); }
     });
@@ -288,8 +295,10 @@
     $("sea").innerHTML = `
       <div class="tiles" style="margin:0 0 8px">
         <div class="tile"><div class="label">Температура моря</div><div class="value">${num(f.sst, 0)}<span class="unit">°C</span></div></div>
-        <div class="tile"><div class="label">Давление</div><div class="value">${num(f.pressure, 0)}<span class="unit">hPa</span></div></div>
+        <div class="tile"><div class="label">Давление</div><div class="value">${num(f.pressure * HPA_TO_MM, 0)}<span class="unit">мм рт. ст.</span></div>
+          <div class="note" style="margin:0">${num(f.pressure, 0)} гПа · ${pressureLabel(f.pressure)}</div></div>
       </div>
+      <div class="note">Давление в морском прогнозе — это атмосферное давление над Кипром на момент выпуска, приведённое к уровню моря; к самому морю оно не относится. Моряки по нему следят за погодой: ниже ~1009 гПа (757 мм) — область циклона, ветрено и возможны осадки; выше ~1017 гПа (763 мм) — антициклон, обычно тихо и ясно; норма — 1013 гПа (760 мм).</div>
       <div class="note">Прогноз ${esc(f.issue)} на ${fmtRange(f.valid_from * 1000, f.valid_to * 1000)}${f.issued ? `, выпущен ${fmtTime(f.issued * 1000)}` : ""} (ветер — в баллах Бофорта)</div>
       <p class="sea-text">${esc(f.synopsis)}</p>
       <div class="note">Видимость: ${esc(f.visibility)} · предупреждения: ${esc(f.warnings)}</div>
