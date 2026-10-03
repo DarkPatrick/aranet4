@@ -32,6 +32,8 @@ log = logging.getLogger("aranet.dom")
 BASE = "https://www.dom.org.cy"
 SEA_PAGES = {k: f"{BASE}/FORECAST/sea_{k.lower()}_en.html" for k in "ABCD"}
 WARNINGS_URL = f"{BASE}/WARNING/"
+RADAR_IMAGES = ["RADAR_Static.png", "RADAR_PFO_MAX_Static.png", "RADAR_LCA_MAX_Static.png"]
+RADAR_URL = f"{BASE}/RADAR_IMG/"
 CLIMATE_ROOT = f"{BASE}/CLIMATOLOGY/English/Daily%20Temperature%20and%20Precipitation%20Data/"
 UA = {"User-Agent": "aranet-monitor/0.1 (+https://github.com/DarkPatrick/aranet4)"}
 
@@ -54,6 +56,12 @@ CREATE TABLE IF NOT EXISTS sea_forecasts (
 CREATE TABLE IF NOT EXISTS warnings (
     ts   INTEGER PRIMARY KEY,       -- when this text was first seen
     text TEXT NOT NULL              -- '' = no warnings in force
+);
+
+CREATE TABLE IF NOT EXISTS radar (
+    image   TEXT PRIMARY KEY,
+    updated INTEGER,                -- Last-Modified of the image on dom.org.cy
+    checked INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS climate_stations (
@@ -211,6 +219,25 @@ def store_warnings(conn, text: str, now: int | None = None) -> bool:
     return True
 
 
+def check_radar(conn) -> None:
+    """The radar images are replaced in place; record when each last changed so the
+    dashboard can hide a radar that stopped updating (it did, summer 2026)."""
+    from email.utils import parsedate_to_datetime
+
+    for image in RADAR_IMAGES:
+        req = urllib.request.Request(RADAR_URL + image, headers=UA, method="HEAD")
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                lm = resp.headers.get("Last-Modified")
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            log.warning("radar %s: %s", image, exc)
+            continue
+        updated = int(parsedate_to_datetime(lm).timestamp()) if lm else None
+        with conn:
+            conn.execute("INSERT OR REPLACE INTO radar (image, updated, checked) VALUES (?, ?, ?)",
+                         (image, updated, int(time.time())))
+
+
 def collect_forecast(db_path: str) -> None:
     conn = connect(db_path)
     try:
@@ -226,6 +253,7 @@ def collect_forecast(db_path: str) -> None:
                          datetime.fromtimestamp(fc["valid_from"], weather.LOCAL_TZ).strftime("%d.%m %H:%M"), fc["sst"], fc["warnings"])
             else:
                 log.warning("sea forecast %s: page not recognised", issue)
+        check_radar(conn)
         text = parse_warnings(get(WARNINGS_URL))
         changed = store_warnings(conn, text)
         log.info("warnings: %s%s", (text[:80] or "none"), " (changed)" if changed else "")
@@ -246,11 +274,13 @@ def _links(url: str) -> list[str]:
     return out
 
 
-def archive_pdfs() -> list[str]:
-    """Every monthly PDF in the archive (year folders -> month folders -> PDF)."""
+def archive_pdfs(min_year: int | None = None) -> list[str]:
+    """Monthly PDFs in the archive (year folders -> month folders -> PDF),
+    optionally only from `min_year` on (a full listing is ~140 requests)."""
     pdfs = []
     for year_url in _links(CLIMATE_ROOT):
-        if not re.search(r"/\d{4}/$", year_url):
+        m = re.search(r"/(\d{4})/$", year_url)
+        if not m or (min_year and int(m.group(1)) < min_year):
             continue
         for month_url in _links(year_url):
             if month_url.lower().endswith(".pdf"):
@@ -407,7 +437,8 @@ def collect_climate(db_path: str, refresh_months: int = 2, pause: float = 1.0) -
         recent = {((today.year * 12 + today.month - 1 - k) // 12, (today.year * 12 + today.month - 1 - k) % 12 + 1)
                   for k in range(refresh_months)}
         total = 0
-        for url in archive_pdfs():
+        # after the first full backfill only the current and previous year can change
+        for url in archive_pdfs(min_year=today.year - 1 if seen else None):
             ym = pdf_month(url)
             if not ym or (url in seen and ym not in recent):
                 continue
@@ -447,7 +478,14 @@ def _tolerant(empty):
     return wrap
 
 
-@_tolerant(lambda: {"forecast": None, "sst": {"ts": [], "sst": []}, "warnings": None})
+def radar_status(conn) -> dict:
+    try:
+        return {r["image"]: r["updated"] for r in conn.execute("SELECT image, updated FROM radar")}
+    except sqlite3.OperationalError:
+        return {}
+
+
+@_tolerant(lambda: {"forecast": None, "sst": {"ts": [], "sst": []}, "warnings": None, "radar": {}})
 def marine(conn) -> dict:
     latest = conn.execute("SELECT * FROM sea_forecasts ORDER BY issued DESC, valid_from DESC LIMIT 1").fetchone()
     sst = conn.execute(
@@ -461,6 +499,7 @@ def marine(conn) -> dict:
         "forecast": out,
         "sst": {"ts": [r["ts"] for r in sst], "sst": [r["sst"] for r in sst]},
         "warnings": dict(warn) if warn else None,
+        "radar": radar_status(conn),
     }
 
 

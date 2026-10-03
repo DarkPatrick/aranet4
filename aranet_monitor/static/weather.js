@@ -302,17 +302,30 @@
   }
 
   // ---------- radar ----------
+  // the images on dom.org.cy are replaced in place; the forecast job records when each
+  // last changed, and a radar that stopped updating is hidden instead of showing old rain
+  const RADAR_FRESH_S = 3 * 3600;
   let radarImg = "RADAR_Static.png";
   function showRadar() {
-    // the images are replaced in place every few minutes: bust the cache per 5 minutes
+    const status = (marine && marine.radar) || {};
+    const fresh = img => status[img] && Date.now() / 1000 - status[img] < RADAR_FRESH_S;
+    const anyFresh = Object.keys(status).some(fresh);
+    const newest = Math.max(0, ...Object.values(status).filter(Boolean));
+    $("radar-box").classList.toggle("hidden", !anyFresh);
+    $("radar-note").textContent = anyFresh ? ""
+      : Object.keys(status).length ? `Радар метеослужбы сейчас не обновляется (последняя картинка — ${fmtDay(newest * 1000)}), поэтому не показываю его.`
+      : "статус радара ещё не проверен — запусти aranet-dom forecast";
+    document.querySelectorAll("#radar-tabs button").forEach(b => { b.disabled = !fresh(b.dataset.img); });
+    if (!anyFresh) return;
+    if (!fresh(radarImg)) radarImg = Object.keys(status).find(fresh);
+    document.querySelectorAll("#radar-tabs button").forEach(b => b.classList.toggle("active", b.dataset.img === radarImg));
+    // bust the browser cache once per 5 minutes
     $("radar").src = `https://www.dom.org.cy/RADAR_IMG/${radarImg}?t=${Math.floor(Date.now() / 300000)}`;
   }
   document.querySelectorAll("#radar-tabs button").forEach(btn => btn.addEventListener("click", () => {
     radarImg = btn.dataset.img;
-    document.querySelectorAll("#radar-tabs button").forEach(b => b.classList.toggle("active", b === btn));
     showRadar();
   }));
-  showRadar();
 
   // ---------- daily archive ----------
   const CLIM = [
@@ -367,8 +380,7 @@
   async function refresh() {
     try {
       await loadClimStations();
-      loadMarine().catch(fail);
-      showRadar();
+      loadMarine().then(showRadar).catch(fail);
       if (!(await loadStations())) return;
       periods.sync();
       await loadCharts();

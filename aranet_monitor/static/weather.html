@@ -49,16 +49,18 @@
 
   <h2>Радар осадков</h2>
   <div class="panel">
-    <div class="row">
-      <div class="quick" id="radar-tabs">
-        <button data-img="RADAR_Static.png" class="active">Сейчас</button>
-        <button data-img="RADAR_Animation.gif">Анимация</button>
-        <button data-img="RADAR_PFO_MAX_Static.png">Пафос, макс.</button>
-        <button data-img="RADAR_LCA_MAX_Static.png">Ларнака, макс.</button>
+    <div class="note" id="radar-note" style="margin:0"></div>
+    <div id="radar-box" class="hidden">
+      <div class="row">
+        <div class="quick" id="radar-tabs">
+          <button data-img="RADAR_Static.png" class="active">Оба радара</button>
+          <button data-img="RADAR_PFO_MAX_Static.png">Пафос + разрез</button>
+          <button data-img="RADAR_LCA_MAX_Static.png">Ларнака + разрез</button>
+        </div>
       </div>
-      <span class="note" style="margin:0">время на картинках — UTC</span>
+      <div class="note">Цвет — отражаемость в dBZ (шкала внизу картинки): до 20 — морось или помехи, 20–35 — слабый и умеренный дождь (~0,5–5 мм/ч), 35–45 — сильный (5–25 мм/ч), 45+ — ливень, гроза, возможен град. «Оба радара» — срез на высоте 2 км; «Пафос/Ларнака + разрез» — максимум по высоте с одного радара, по краям — вертикальные проекции (высота облаков в футах). Время на картинках — UTC.</div>
+      <img id="radar" class="radar" alt="радар осадков" loading="lazy">
     </div>
-    <img id="radar" class="radar" alt="радар осадков" loading="lazy">
   </div>
 
   <h2>Суточный архив с 2016 года</h2>

@@ -166,3 +166,30 @@ def test_pdf_with_overdrawn_row_march_2016():
     d1 = {r["name"]: r for r in rows if r["date"] == "2016-03-01"}
     assert (d1["Athalassa"]["tmax"], d1["Athalassa"]["tmin"], d1["Athalassa"]["rain"]) == (27.1, 10.1, 0.0)
     assert all(r["tmax"] >= r["tmin"] for r in rows if r["tmax"] is not None and r["tmin"] is not None)
+
+
+def test_marine_reports_radar_freshness(tmp_path):
+    conn = dom.connect(str(tmp_path / "w.db"))
+    assert dom.marine(conn)["radar"] == {}
+    with conn:
+        conn.execute("INSERT INTO radar (image, updated, checked) VALUES ('RADAR_Static.png', 100, 200)")
+    assert dom.marine(conn)["radar"] == {"RADAR_Static.png": 100}
+
+
+def test_archive_crawl_can_skip_old_years(monkeypatch):
+    root = dom.CLIMATE_ROOT
+    tree = {
+        root: [root + "2016/", root + "2025/", root + "2026/"],
+        root + "2016/": [root + "2016/January/"],
+        root + "2025/": [root + "2025/December/"],
+        root + "2026/": [root + "2026/01_January/"],
+        root + "2016/January/": [root + "2016/January/X_01_2016.pdf"],
+        root + "2025/December/": [root + "2025/December/X_12_2025.pdf"],
+        root + "2026/01_January/": [root + "2026/01_January/X_01_2026.pdf"],
+    }
+    calls = []
+    monkeypatch.setattr(dom, "_links", lambda url: calls.append(url) or tree[url])
+    assert len(dom.archive_pdfs()) == 3
+    calls.clear()
+    assert [dom.pdf_month(u) for u in dom.archive_pdfs(min_year=2025)] == [(2025, 12), (2026, 1)]
+    assert root + "2016/" not in calls
