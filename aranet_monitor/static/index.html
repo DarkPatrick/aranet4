@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aranet4</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --muted: #6b7280; --border: #e5e7eb;
+    --grid: #eef0f3; --good: #2e9e5b; --warn: #d9a400; --bad: #d64545;
+    --temp: #e0752d; --hum: #2f7fd1; --pres: #7a5cc7; --co2: #2e9e5b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --card: #1b1f27; --text: #e6e8ec; --muted: #9aa1ad; --border: #2a303b;
+      --grid: #262b35; --good: #43b874; --warn: #e3b42b; --bad: #ec6060;
+      --temp: #f08a45; --hum: #5a9ee6; --pres: #9b80e0; --co2: #43b874;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 16px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; justify-content: space-between; }
+  h1 { font-size: 20px; margin: 0; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 16px 0; }
+  .tile { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .tile .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .tile .value { font-size: 28px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .tile .unit { font-size: 14px; color: var(--muted); font-weight: 400; margin-left: 4px; }
+  .tile.co2 { border-left: 4px solid var(--border); }
+  .ranges { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ranges button { background: var(--card); color: var(--text); border: 1px solid var(--border);
+                   border-radius: 6px; padding: 5px 12px; cursor: pointer; font: inherit; }
+  .ranges button.active { background: var(--text); color: var(--card); border-color: var(--text); }
+  .chart { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+           height: 260px; margin-bottom: 12px; }
+  .chart.big { height: 320px; }
+  .empty { padding: 40px; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="title">Aranet4</h1>
+    <div class="ranges" id="ranges">
+      <button data-h="6">6 ч</button>
+      <button data-h="24" class="active">24 ч</button>
+      <button data-h="168">7 дн</button>
+      <button data-h="720">30 дн</button>
+      <button data-h="all">Всё</button>
+    </div>
+  </header>
+  <div class="meta" id="meta">загрузка…</div>
+
+  <div class="tiles">
+    <div class="tile co2" id="tile-co2"><div class="label">CO₂</div><div class="value"><span id="v-co2">–</span><span class="unit">ppm</span></div></div>
+    <div class="tile"><div class="label">Температура</div><div class="value"><span id="v-temp">–</span><span class="unit">°C</span></div></div>
+    <div class="tile"><div class="label">Влажность</div><div class="value"><span id="v-hum">–</span><span class="unit">%</span></div></div>
+    <div class="tile"><div class="label">Давление</div><div class="value"><span id="v-pres">–</span><span class="unit">hPa</span></div></div>
+    <div class="tile"><div class="label">Батарея</div><div class="value"><span id="v-bat">–</span><span class="unit">%</span></div></div>
+  </div>
+
+  <div id="charts">
+    <div class="chart big" id="c-co2"></div>
+    <div class="chart" id="c-temp"></div>
+    <div class="chart" id="c-hum"></div>
+    <div class="chart" id="c-pres"></div>
+  </div>
+</div>
+
+<script src="/static/echarts.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

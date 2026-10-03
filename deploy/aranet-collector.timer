@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Aranet4 collector every 10 minutes
+
+[Timer]
+OnCalendar=*:0/10
+OnBootSec=1min
+Persistent=true
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

@@ -1,1 +1,64 @@
 # aranet4
+
+Сбор показаний датчика **Aranet4** по Bluetooth в локальную SQLite и простой дашборд на Apache ECharts.
+
+Два блока:
+
+- **collector** (`aranet-collect`): подключается к датчику и забирает всю историю, которую тот записал с последней сохранённой точки. Поэтому если Pi был выключен, пропуск заполнится из памяти датчика (Aranet4 хранит примерно 5000 точек, это около 17 дней при шаге 5 минут). Плюс текущие показания и батарея. Запускается раз в 10 минут через systemd timer, на Mac можно с `--loop`.
+- **dashboard** (`aranet-dashboard`): маленький HTTP-сервер на стандартной библиотеке Python. Отдаёт JSON API и страницу с графиками CO₂ / температуры / влажности / давления. ECharts лежит в репозитории, интернет не нужен.
+
+Из зависимостей только [`aranet4`](https://github.com/Anrijs/Aranet4-Python) (тянет `bleak`). Работает на macOS и Linux (BlueZ).
+
+## Быстрый старт (macOS / любая машина)
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e ".[test]"
+.venv/bin/aranet-collect --scan              # найти адрес датчика
+cp config.env.example config.env             # вписать ARANET_ADDRESS
+.venv/bin/aranet-collect                     # один сбор
+.venv/bin/aranet-dashboard                   # http://localhost:8080
+.venv/bin/pytest                             # тесты
+```
+
+На macOS адрес — это UUID CoreBluetooth, а не MAC. Терминал должен иметь доступ к Bluetooth: «Системные настройки → Конфиденциальность → Bluetooth».
+
+## Установка на Ubuntu (Raspberry Pi, Ubuntu Server 24.04)
+
+```bash
+git clone https://github.com/DarkPatrick/aranet4.git && cd aranet4
+./deploy/install.sh
+.venv/bin/aranet-collect --scan              # MAC вида AA:BB:CC:DD:EE:FF
+nano config.env                              # ARANET_ADDRESS=...
+sudo systemctl enable --now aranet-collector.timer
+```
+
+`install.sh` ставит `bluez` (и `pi-bluetooth` на Pi), создаёт `.venv`, кладёт systemd-юниты и включает дашборд на `http://<host>.local:8080`.
+
+Полезное:
+
+```bash
+systemctl list-timers aranet-collector.timer      # когда следующий запуск
+journalctl -u aranet-collector -n 20              # логи сборщика
+journalctl -u aranet-dashboard -f                 # логи дашборда
+sudo systemctl start aranet-collector             # собрать прямо сейчас
+```
+
+Если Linux не может прочитать историю (`history read failed` в логе), сопряги датчик один раз: `bluetoothctl` → `pair <MAC>` и введи PIN с экрана Aranet.
+
+## Настройки (`config.env`)
+
+| переменная | по умолчанию | |
+|---|---|---|
+| `ARANET_ADDRESS` | — | адрес датчика (обязательно) |
+| `ARANET_DB` | `data/aranet.db` | файл SQLite |
+| `ARANET_HOST` | `0.0.0.0` | адрес дашборда |
+| `ARANET_PORT` | `8080` | порт дашборда |
+
+## Данные
+
+Таблица `readings(ts, co2, temperature, humidity, pressure)`: `ts` — unix-время UTC, одна строка на точку, которую записал датчик. Таблица `device_status(ts, name, version, battery, interval)`: одна строка на каждый запуск сборщика.
+
+API: `GET /api/readings?hours=24` (без параметра — всё), `GET /api/latest`.
+
+Чтобы копить точки ровно раз в 10 минут, поменяй интервал записи в приложении Aranet на 10 мин. Иначе в базу попадает каждая точка, которую записал датчик (по умолчанию раз в 5 минут).

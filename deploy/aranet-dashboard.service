@@ -1,0 +1,15 @@
+[Unit]
+Description=Aranet4 dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__USER__
+WorkingDirectory=__DIR__
+EnvironmentFile=__DIR__/config.env
+ExecStart=__DIR__/.venv/bin/aranet-dashboard
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

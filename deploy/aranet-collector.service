@@ -1,0 +1,12 @@
+[Unit]
+Description=Aranet4 collector (one run)
+After=bluetooth.service network-online.target
+Wants=bluetooth.service
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__DIR__
+EnvironmentFile=__DIR__/config.env
+ExecStart=__DIR__/.venv/bin/aranet-collect
+TimeoutStartSec=300
