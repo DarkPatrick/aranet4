@@ -162,3 +162,7 @@ def test_pdf_with_overdrawn_row_march_2016():
     d20 = {r["name"]: r for r in rows if r["date"] == "2016-03-20"}
     assert (d20["Pafos Airport"]["tmax"], d20["Pafos Airport"]["tmin"]) == (20.4, 11.5)
     assert d20["New Limassol Port"]["tmax"] == 22.9
+    # the header in this file is spaced unlike the data; poppler shifted columns here
+    d1 = {r["name"]: r for r in rows if r["date"] == "2016-03-01"}
+    assert (d1["Athalassa"]["tmax"], d1["Athalassa"]["tmin"], d1["Athalassa"]["rain"]) == (27.1, 10.1, 0.0)
+    assert all(r["tmax"] >= r["tmin"] for r in rows if r["tmax"] is not None and r["tmin"] is not None)

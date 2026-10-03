@@ -372,6 +372,8 @@ def parse_climate(text: str, year: int, month: int) -> list[dict]:
             rain, trace = _cell(cells[3 * s + 2])
             if tmax is None and tmin is None and rain is None:
                 continue
+            if tmax is not None and tmin is not None and tmax < tmin:
+                log.warning("%s %s: max %s < min %s, columns misread?", name, date, tmax, tmin)
             rows.append({"name": name, "date": date, "tmax": tmax, "tmin": tmin, "rain": rain, "trace": trace})
     return rows
 
