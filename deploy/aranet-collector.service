@@ -1,4 +1,7 @@
 [Unit]
+# wait for NTP: the Pi has no RTC battery and boots with a stale clock
+After=time-sync.target
+Wants=time-sync.target
 Description=Aranet4 collector (one run)
 After=bluetooth.service network-online.target
 Wants=bluetooth.service

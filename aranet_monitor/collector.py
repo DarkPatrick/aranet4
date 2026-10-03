@@ -103,7 +103,25 @@ def read_device(address: str, since_ts: int | None) -> DeviceData:
     return asyncio.run(_read_device(address, since_ts))
 
 
+TIMESYNC_DIR = "/run/systemd/timesync"
+
+
+def clock_synced() -> bool:
+    """False while systemd-timesyncd hasn't synchronised the clock yet. A Pi without an
+    RTC battery boots with the time it was switched off at, and readings timestamped
+    from that clock would land in the wrong place. Off systemd (macOS): assume synced."""
+    import os
+
+    if not os.path.isdir(TIMESYNC_DIR):
+        return True
+    return os.path.exists(os.path.join(TIMESYNC_DIR, "synchronized"))
+
+
 def collect_once(address: str, db_path: str) -> int:
+    if not clock_synced():
+        # nothing is lost: the next run reads the device memory since the last stored point
+        log.warning("system clock not synchronised yet, skipping this run")
+        return 0
     conn = db.connect(db_path)
     try:
         data = read_device(address, db.last_ts(conn))

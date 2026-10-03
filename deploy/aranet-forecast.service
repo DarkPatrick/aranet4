@@ -1,4 +1,7 @@
 [Unit]
+# wait for NTP: the Pi has no RTC battery and boots with a stale clock
+After=time-sync.target
+Wants=time-sync.target
 Description=dom.org.cy forecast bulletins + translation (one run)
 After=network-online.target
 Wants=network-online.target

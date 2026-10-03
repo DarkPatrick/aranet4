@@ -15,6 +15,8 @@ $APT install -y -qq python3-venv bluez
 # Raspberry Pi needs pi-bluetooth to bring up the onboard BT chip; harmless to skip elsewhere
 $APT install -y -qq pi-bluetooth 2>/dev/null || true
 sudo systemctl enable --now bluetooth
+# makes time-sync.target wait for an actual NTP sync (collector units order after it)
+sudo systemctl enable systemd-time-wait-sync.service
 sudo usermod -aG bluetooth "$USER_NAME"
 
 echo "==> python venv"

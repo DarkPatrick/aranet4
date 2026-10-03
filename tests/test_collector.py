@@ -120,3 +120,13 @@ def test_missing_values_become_null(fake, db_path):
 def test_main_requires_address(monkeypatch, tmp_path):
     monkeypatch.delenv("ARANET_ADDRESS", raising=False)
     assert collector.main(["--config", str(tmp_path / "none.env"), "--db", str(tmp_path / "x.db")]) == 2
+
+
+def test_skips_until_clock_is_synced(fake, db_path, tmp_path, monkeypatch):
+    sync_dir = tmp_path / "timesync"
+    sync_dir.mkdir()
+    monkeypatch.setattr(collector, "TIMESYNC_DIR", str(sync_dir))
+    assert collector.collect_once("AA:BB:CC:DD:EE:FF", db_path) == 0  # not synced: nothing read or stored
+    assert db.fetch_readings(db.connect(db_path)) == []
+    (sync_dir / "synchronized").touch()
+    assert collector.collect_once("AA:BB:CC:DD:EE:FF", db_path) == 10
