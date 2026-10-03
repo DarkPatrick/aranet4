@@ -146,7 +146,12 @@ window.UI = (() => {
   // ---------- data helpers ----------
   // API columns use unix seconds; charts and lookups use ms, A shifted onto B
   const toMs = (d, shift = 0) => Object.fromEntries(Object.entries(d).map(([k, v]) => [k, k === "ts" ? v.map(t => t * 1000 + shift) : v]));
-  const typicalStep = set => set && set.ts.length > 1 ? (set.ts[set.ts.length - 1] - set.ts[0]) / (set.ts.length - 1) : 600e3;
+  // median spacing: an average would be inflated by the very gaps it is used to detect
+  const typicalStep = set => {
+    if (!set || set.ts.length < 2) return 600e3;
+    const d = set.ts.slice(1).map((t, i) => t - set.ts[i]).sort((a, b) => a - b);
+    return d[d.length >> 1] || 600e3;
+  };
 
   // nearest point to t in a columnar {ts (ms, ascending), [key]} set, or null if too far
   function nearest(set, key, t, maxGap) {
@@ -157,6 +162,18 @@ window.UI = (() => {
     if (Math.abs(set.ts[i] - t) > maxGap) return null;
     return { t: set.ts[i], v: set[key][i] };
   }
+
+  // [[t, v], ...] -> same, with a null point inside every gap longer than `maxGap`,
+  // so the line breaks there instead of bridging days without data
+  function breakGaps(pts, maxGap) {
+    const out = [];
+    for (let i = 0; i < pts.length; i++) {
+      if (i && pts[i][0] - pts[i - 1][0] > maxGap) out.push([(pts[i][0] + pts[i - 1][0]) / 2, null]);
+      out.push(pts[i]);
+    }
+    return out;
+  }
+  const gapLimit = step => Math.max(3 * step, 30 * 60e3);
 
   // sum `key` into buckets of `size` ms (local-day buckets when size >= DAY)
   function bucketSum(set, key, size) {
@@ -413,7 +430,11 @@ window.UI = (() => {
     }
 
     render() {
-      const pts = s => s ? s.ts.map((t, i) => [t, s[this.m.key][i]]) : [];
+      const pts = s => {
+        if (!s) return [];
+        const raw = s.ts.map((t, i) => [t, s[this.m.key][i]]);
+        return this.m.bar ? raw : breakGaps(raw, gapLimit(this.step));
+      };
       // a line through one or two points draws nothing: show the points while data is sparse
       const sparse = s => !this.m.bar && s && s.ts.length < SPARSE;
       const series = s => ({ data: pts(s), ...(this.m.bar ? {} : { showSymbol: !!sparse(s), symbolSize: 5 }) });
@@ -432,6 +453,6 @@ window.UI = (() => {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => charts.forEach(c => c.applyTheme()));
   }
 
-  return { HPA_TO_MM, pressureLabel, pressureBands, tendency, zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
+  return { breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, tendency, zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
            Periods, toMs, nearest, typicalStep, stats, renderCompareTable, SeriesChart, linkCharts };
 })();

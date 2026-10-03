@@ -1,5 +1,5 @@
 (() => {
-  const { HPA_TO_MM, pressureLabel, pressureBands, zoomOptions, armZoom, resetZoom, SPARSE, DAY, css, $, store, fmtTime, fmtDay, fmtRange, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
+  const { breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, zoomOptions, armZoom, resetZoom, SPARSE, DAY, css, $, store, fmtTime, fmtDay, fmtRange, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
   const REFRESH_MS = 5 * 60 * 1000;
   const STALE_S = 3600;
   const prefs = store("weather");
@@ -243,7 +243,8 @@
     if (!has) return;
     home.chart.resize();
     resetZoom(home.chart);
-    const line = (s, k) => ({ data: s.ts.map((t, i) => [t, s[k][i]]), showSymbol: s.ts.length < SPARSE, symbolSize: 5 });
+    const line = (s, k) => ({ data: breakGaps(s.ts.map((t, i) => [t, s[k][i]]), gapLimit(typicalStep(s))),
+                              showSymbol: s.ts.length < SPARSE, symbolSize: 5 });
     home.chart.setOption({
       title: { text: `Температура: дома и на улице (${label(selected)}), °C` },
       xAxis: { min: range[0], max: range[1] },
