@@ -51,7 +51,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
     def _with_db(self, fn, *args):
-        conn = db.connect(self.db_path)
+        conn = db.connect_readonly(self.db_path)
         try:
             return fn(conn, *args)
         finally:
@@ -111,7 +111,6 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def make_server(host: str, port: int, db_path: str) -> ThreadingHTTPServer:
-    db.connect(db_path).close()  # create the file/schema so the API works before the first collection
     return ThreadingHTTPServer((host, port), partial(Handler, db_path=db_path))
 
 

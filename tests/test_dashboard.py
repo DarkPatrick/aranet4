@@ -70,3 +70,16 @@ def test_errors(server, path, code):
     with pytest.raises(urllib.error.HTTPError) as exc:
         get(server + path)
     assert exc.value.code == code
+
+
+def test_missing_db_reads_as_empty(tmp_path):
+    path = tmp_path / "absent.db"
+    srv = dashboard.make_server("127.0.0.1", 0, str(path))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{srv.server_address[1]}"
+        assert json.loads(get(base + "/api/readings")[2])["ts"] == []
+        assert json.loads(get(base + "/api/latest")[2])["reading"] is None
+        assert not path.exists()  # the dashboard never creates or writes the database
+    finally:
+        srv.shutdown()

@@ -9,4 +9,6 @@ User=__USER__
 WorkingDirectory=__DIR__
 EnvironmentFile=__DIR__/config.env
 ExecStart=__DIR__/.venv/bin/aranet-collect
+# no-op unless ARANET_SYNC_TARGET is set; "-" so a network hiccup doesn't fail the run
+ExecStartPost=-__DIR__/.venv/bin/aranet-sync
 TimeoutStartSec=300

@@ -18,6 +18,7 @@ test = ["pytest>=8"]
 [project.scripts]
 aranet-collect = "aranet_monitor.collector:main"
 aranet-dashboard = "aranet_monitor.dashboard:main"
+aranet-sync = "aranet_monitor.sync:main"
 
 [tool.setuptools.packages.find]
 include = ["aranet_monitor*"]

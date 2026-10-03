@@ -28,6 +28,8 @@ class Settings:
     db_path: str
     host: str
     port: int
+    sync_target: str
+    sync_key: str
 
 
 def get_settings(config_file: str | None = None) -> Settings:
@@ -37,4 +39,6 @@ def get_settings(config_file: str | None = None) -> Settings:
         db_path=os.environ.get("ARANET_DB", "data/aranet.db"),
         host=os.environ.get("ARANET_HOST", "0.0.0.0"),
         port=int(os.environ.get("ARANET_PORT", "8080")),
+        sync_target=os.environ.get("ARANET_SYNC_TARGET", "").strip(),
+        sync_key=os.path.expanduser(os.environ.get("ARANET_SYNC_KEY", "~/.ssh/id_ed25519_aranet_sync")),
     )
