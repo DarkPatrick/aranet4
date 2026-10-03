@@ -24,7 +24,7 @@ chown aranet:aranet /home/aranet/.ssh/authorized_keys; chmod 600 /home/aranet/.s
 
 echo "==> app"
 APT="apt-get -o DPkg::Lock::Timeout=900"
-$APT install -y -qq python3-venv rsync nginx >/dev/null
+$APT install -y -qq python3-venv rsync nginx poppler-utils >/dev/null
 # nginx must not take port 80: certbot renews with its standalone server there
 rm -f /etc/nginx/sites-enabled/default
 python3 -m venv "$DIR/.venv"
@@ -35,11 +35,11 @@ ARANET_WEATHER_DB=$WEATHER/weather.db
 ARANET_HOST=127.0.0.1
 ARANET_PORT=$APP_PORT
 CFG
-for unit in aranet-dashboard.service aranet-weather.service aranet-weather.timer; do
+for unit in aranet-dashboard.service aranet-weather.service aranet-weather.timer aranet-dom-forecast.service aranet-dom-forecast.timer aranet-dom-climate.service aranet-dom-climate.timer; do
   sed -e "s|__DIR__|$DIR|g" -e "s|__USER__|aranet|g" "$DIR/deploy/$unit" > "/etc/systemd/system/$unit"
 done
 systemctl daemon-reload
-systemctl enable --now aranet-dashboard.service aranet-weather.timer
+systemctl enable --now aranet-dashboard.service aranet-weather.timer aranet-dom-forecast.timer aranet-dom-climate.timer
 systemctl restart aranet-dashboard.service
 
 echo "==> nginx on https://$DOMAIN:$PORT"

@@ -2,14 +2,14 @@
     --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --muted: #6b7280; --border: #e5e7eb;
     --grid: #eef0f3; --good: #2e9e5b; --warn: #d9a400; --bad: #d64545; --cmp: #8b93a1;
     --temp: #e0752d; --hum: #2f7fd1; --pres: #7a5cc7; --co2: #2e9e5b; --head: #f1f3f6;
-    --rain: #1f8fb3; --wind: #4f8a5b; --rad: #c98a12; --home: #b0459b;
+    --rain: #1f8fb3; --wind: #4f8a5b; --rad: #c98a12; --home: #b0459b; --feel: #c2416b; --sea: #1b7f9e;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #12151b; --card: #1b1f27; --text: #e6e8ec; --muted: #9aa1ad; --border: #2a303b;
       --grid: #262b35; --good: #43b874; --warn: #e3b42b; --bad: #ec6060; --cmp: #7d8594;
       --temp: #f08a45; --hum: #5a9ee6; --pres: #9b80e0; --co2: #43b874; --head: #222733;
-      --rain: #3fb0d4; --wind: #6fb07c; --rad: #e0a72e; --home: #d36bbf;
+      --rain: #3fb0d4; --wind: #6fb07c; --rad: #e0a72e; --home: #d36bbf; --feel: #e57396; --sea: #45b3d6;
     }
   }
   * { box-sizing: border-box; }
@@ -73,3 +73,14 @@
 select.station { min-width: 220px; font-weight: 600; }
 .leaflet-container .leaflet-control-attribution { background: var(--card); color: var(--muted); opacity: .85; }
 .leaflet-control-attribution a { color: var(--muted); }
+
+h2 { font-size: 16px; margin: 22px 0 8px; }
+.banner { background: #fdecc8; color: #5a3b00; border: 1px solid #e3b42b; border-radius: 10px; padding: 10px 14px; margin: 10px 0; white-space: pre-line; font-weight: 600; }
+@media (prefers-color-scheme: dark) { .banner { background: #3a2d0a; color: #f3d27a; border-color: #8a6d16; } }
+img.radar { display: block; max-width: 100%; margin: 10px auto 0; border-radius: 6px; }
+table.coast { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+table.coast th, table.coast td { padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+table.coast th { color: var(--muted); font-weight: 600; background: var(--head); }
+.sea-text { margin: 6px 0; }
+table.coast td:nth-child(n) { min-width: 70px; }
+@media (max-width: 600px) { table.coast { font-size: 12px; } }

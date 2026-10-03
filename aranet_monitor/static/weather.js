@@ -1,5 +1,5 @@
 (() => {
-  const { SPARSE, css, $, store, fmtTime, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
+  const { SPARSE, DAY, css, $, store, fmtTime, fmtDay, fmtRange, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
   const REFRESH_MS = 5 * 60 * 1000;
   const STALE_S = 3600;
   const prefs = store("weather");
@@ -18,6 +18,7 @@
 
   const METRICS = [
     { key: "temp", el: "c-temp", title: "Температура, °C", unit: "°C", digits: 1, color: "--temp", rows: ["mean", "min", "max"] },
+    { key: "net", el: "c-net", title: "Ощущается (NET), °C", unit: "°C", digits: 1, color: "--feel", rows: ["mean", "min", "max"] },
     { key: "rh", el: "c-rh", title: "Влажность, %", unit: "%", digits: 0, color: "--hum", rows: ["mean", "min", "max"] },
     { key: "rain", el: "c-rain", title: "Осадки, мм", unit: "мм", digits: 1, color: "--rain", bar: true,
       rows: ["sum", { label: "макс. за 10 мин", get: s => s.max }] },
@@ -131,7 +132,7 @@
     const l = st.latest || {};
     const w = pick(WIND, st.metrics), p = pick(PRES, st.metrics);
     const tiles = [
-      ["Температура", l.temp, 1, "°C"], ["Влажность", l.rh, 0, "%"], ["Осадки за 10 мин", l.rain, 1, "мм"],
+      ["Температура", l.temp, 1, "°C"], ["Ощущается", l.net, 1, "°C"], ["Влажность", l.rh, 0, "%"], ["Осадки за 10 мин", l.rain, 1, "мм"],
       w && [w[1], l[w[0]], 1, "м/с"], p && [p[1], l[p[0]], 1, "hPa"], ["Радиация", l.rad_global, 0, "W/m²"], ["Снег", l.snow, 0, "см"],
     ].filter(x => x && x[1] != null);
     $("tiles").innerHTML = tiles.map(([n, v, d, u]) =>
@@ -146,7 +147,9 @@
   // "Всё" spans both sources: the station's history and the home sensor's
   let homeFirst = null;
   function setBounds(st) {
-    const firsts = [st.first, homeFirst].filter(Boolean);
+    const clim = climStations.find(c => c.code === climSelected);
+    const climFirst = clim ? Math.floor(new Date(clim.first + "T00:00:00").getTime() / 1000) : null;
+    const firsts = [st.first, homeFirst, climFirst].filter(Boolean);
     periods.setBounds(firsts.length ? Math.min(...firsts) * 1000 : null);
   }
 
@@ -154,6 +157,7 @@
     if (!byCode[code]) return;
     selected = code;
     prefs.set("station", code);
+    if (climStations.some(c => c.code === code)) setClimStation(code, false);
     $("station").value = code;
     drawMarkers();
     setTilesFor(byCode[code]);
@@ -205,6 +209,8 @@
 
     home.sets = { home: toMs(homeB), out: setB };
     renderHome(b);
+    renderSst();
+    loadClimate().catch(fail);
   }
 
   function renderHome(range = home.range) {
@@ -246,11 +252,123 @@
     return true;
   }
 
+  // ---------- sea, warnings ----------
+  const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const SST = { key: "sst", title: "Температура моря, °C", unit: "°C", digits: 1, color: "--sea", daily: true, rows: ["mean", "min", "max"] };
+  const sstChart = new SeriesChart($("c-sst"), SST);
+  let marine = null;
+
+  async function loadMarine() {
+    marine = await getJSON("/api/weather/marine");
+    const w = marine.warnings && marine.warnings.text;
+    const f = marine.forecast;
+    const seaWarn = f && f.warnings && !/^nil$/i.test(f.warnings.trim()) ? `Море: ${f.warnings}` : "";
+    const banner = [w && `⚠ Предупреждение метеослужбы:\n${w}`, seaWarn && `⚠ ${seaWarn}`].filter(Boolean).join("\n\n");
+    $("warn-banner").textContent = banner;
+    $("warn-banner").classList.toggle("hidden", !banner);
+    if (!f) { $("sea").textContent = "данных пока нет — запусти aranet-dom forecast"; return; }
+    const coasts = Object.entries(f.areas || {}).map(([coast, rows]) => rows.map((r, i) =>
+      `<tr>${i === 0 ? `<td rowspan="${rows.length}"><b>${esc(coast)}</b></td>` : ""}<td>${esc(r[0])}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join("")).join("");
+    $("sea").innerHTML = `
+      <div class="tiles" style="margin:0 0 8px">
+        <div class="tile"><div class="label">Температура моря</div><div class="value">${num(f.sst, 0)}<span class="unit">°C</span></div></div>
+        <div class="tile"><div class="label">Давление</div><div class="value">${num(f.pressure, 0)}<span class="unit">hPa</span></div></div>
+      </div>
+      <div class="note">Прогноз ${esc(f.issue)} на ${fmtRange(f.valid_from * 1000, f.valid_to * 1000)}${f.issued ? `, выпущен ${fmtTime(f.issued * 1000)}` : ""} (ветер — в баллах Бофорта)</div>
+      <p class="sea-text">${esc(f.synopsis)}</p>
+      <div class="note">Видимость: ${esc(f.visibility)} · предупреждения: ${esc(f.warnings)}</div>
+      ${coasts ? `<details><summary class="note" style="cursor:pointer">Ветер и волнение по побережьям</summary>
+        <div class="scroll"><table class="coast"><tr><th>Побережье</th><th>Когда</th><th>Ветер</th><th>Волнение</th></tr>${coasts}</table></div></details>` : ""}`;
+    renderSst();
+  }
+
+  function renderSst() {
+    if (!marine) return;
+    const all = toMs(marine.sst);
+    const b = periods.b(), a = periods.a(b);
+    const cut = (set, [from, to], shift) => {
+      const idx = set.ts.map((t, i) => i).filter(i => set.ts[i] >= from && set.ts[i] <= to);
+      return { ts: idx.map(i => set.ts[i] + shift), sst: idx.map(i => set.sst[i]) };
+    };
+    sstChart.show(all.ts.length > 0);
+    if (!all.ts.length) return;
+    // the SST series is daily (one value per forecast issue): widen a short B to
+    // three days so there is something to see; A is widened by the same amount
+    const widen = Math.max(0, 3 * DAY - (b[1] - b[0]));
+    const spanB = [b[0] - widen, b[1]];
+    const spanA = a ? [a[0] - widen, a[1]] : null;
+    const offset = a ? b[0] - a[0] : 0;
+    sstChart.set(cut(all, spanB, 0), a ? cut(all, spanA, offset) : null, offset, spanB);
+  }
+
+  // ---------- radar ----------
+  let radarImg = "RADAR_Static.png";
+  function showRadar() {
+    // the images are replaced in place every few minutes: bust the cache per 5 minutes
+    $("radar").src = `https://www.dom.org.cy/RADAR_IMG/${radarImg}?t=${Math.floor(Date.now() / 300000)}`;
+  }
+  document.querySelectorAll("#radar-tabs button").forEach(btn => btn.addEventListener("click", () => {
+    radarImg = btn.dataset.img;
+    document.querySelectorAll("#radar-tabs button").forEach(b => b.classList.toggle("active", b === btn));
+    showRadar();
+  }));
+  showRadar();
+
+  // ---------- daily archive ----------
+  const CLIM = [
+    { key: "tmax", el: "c-tmax", title: "Максимум за сутки, °C", unit: "°C", digits: 1, color: "--temp", daily: true,
+      rows: ["mean", "max", { label: "дней ≥ 35 °C", get: s => Math.round(s.above(34.95) * s.n / 100), digits: 0, unit: "дн." }] },
+    { key: "tmin", el: "c-tmin", title: "Минимум за сутки, °C", unit: "°C", digits: 1, color: "--hum", daily: true,
+      rows: ["mean", "min", { label: "ночей ≥ 25 °C", get: s => Math.round(s.above(24.95) * s.n / 100), digits: 0, unit: "дн." }] },
+    { key: "rain", el: "c-crain", title: "Осадки за сутки, мм", unit: "мм", digits: 1, color: "--rain", bar: true, daily: true,
+      rows: ["sum", { label: "дней с осадками ≥ 1 мм", get: s => Math.round(s.above(0.95) * s.n / 100), digits: 0, unit: "дн." }] },
+  ];
+  const climCharts = CLIM.map(m => new SeriesChart($(m.el), m));
+  linkCharts([...climCharts, sstChart]);
+  let climStations = [], climSelected = prefs.get("climStation", "ATHALASSA");
+
+  function setClimStation(code, reload = true) {
+    if (!climStations.some(c => c.code === code)) return;
+    climSelected = code;
+    prefs.set("climStation", code);
+    $("clim-station").value = code;
+    const c = climStations.find(x => x.code === code);
+    $("clim-meta").textContent = `${c.days} дней, ${fmtDay(new Date(c.first + "T00:00:00").getTime())} – ${fmtDay(new Date(c.last + "T00:00:00").getTime())}`;
+    if (reload) loadClimate().catch(fail);
+  }
+  $("clim-station").addEventListener("change", () => setClimStation($("clim-station").value));
+
+  async function loadClimStations() {
+    climStations = await getJSON("/api/weather/climate/stations");
+    $("clim-station").innerHTML = climStations.map(c => `<option value="${c.code}">${esc(c.name)}</option>`).join("");
+    if (!climStations.some(c => c.code === climSelected) && climStations.length) climSelected = climStations[0].code;
+    if (climStations.length) setClimStation(climSelected, false);
+    else $("clim-meta").textContent = "архив ещё не загружен — запусти aranet-dom climate";
+  }
+
+  let climSeq = 0;
+  async function loadClimate() {
+    if (!climStations.length) { climCharts.forEach(c => c.show(false)); return; }
+    const b = periods.b(), a = periods.a(b);
+    const seq = ++climSeq;
+    const fetchClim = r => getJSON(`/api/weather/climate?station=${encodeURIComponent(climSelected)}&${q(r)}`);
+    const [dataB, dataA] = await Promise.all([fetchClim(b), a ? fetchClim(a) : Promise.resolve(null)]);
+    if (seq !== climSeq) return;
+    const offset = a ? b[0] - a[0] : 0;
+    const setB = toMs(dataB), setA = dataA ? toMs(dataA, offset) : null;
+    climCharts.forEach(c => { c.show(true); c.set(setB, setA, offset, b); });
+    $("clim-cmp-panel").classList.toggle("hidden", !a);
+    if (a) renderCompareTable($("clim-cmp-table"), CLIM, dataB, dataA);
+  }
+
   const fail = e => { $("meta").textContent = "ошибка загрузки: " + e.message; };
   const periods = new Periods($("periods"), "weather", () => loadCharts().catch(fail));
 
   async function refresh() {
     try {
+      await loadClimStations();
+      loadMarine().catch(fail);
+      showRadar();
       if (!(await loadStations())) return;
       periods.sync();
       await loadCharts();

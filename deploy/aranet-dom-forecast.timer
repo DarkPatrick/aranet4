@@ -1,0 +1,10 @@
+[Unit]
+Description=Sea forecasts and weather warnings from dom.org.cy every 30 minutes
+
+[Timer]
+OnCalendar=*:07/30
+OnBootSec=2min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

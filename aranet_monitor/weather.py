@@ -195,6 +195,19 @@ def collect_once(db_path: str, url: str = FEED_URL) -> int:
 
 # ---------- reads for the dashboard ----------
 
+def net(temp, rh, wind):
+    """Normal Effective Temperature (Gregorczuk), the "feels like" index the
+    Cyprus Department of Meteorology publishes; wind in m/s at 10 m."""
+    if temp is None or rh is None or wind is None:
+        return None
+    v = max(wind, 0.0)
+    value = 37 - (37 - temp) / (0.68 - 0.0014 * rh + 1 / (1.76 + 1.4 * v ** 0.75)) - 0.29 * temp * (1 - 0.01 * rh)
+    return round(value, 1)
+
+
+def _wind_for_net(row) -> float | None:
+    return row["wind10"] if row["wind10"] is not None else row["wind2"]
+
 def station_list(conn) -> list[dict]:
     """Stations with their latest observation and which columns they ever reported."""
     out = []
@@ -203,6 +216,8 @@ def station_list(conn) -> list[dict]:
             "SELECT * FROM observations WHERE station = ? ORDER BY ts DESC LIMIT 1", (st["code"],)
         ).fetchone()
         latest = {k: last[k] for k in ("ts", *VALUE_COLUMNS)} if last else None
+        if latest:
+            latest["net"] = net(last["temp"], last["rh"], _wind_for_net(last))
         has = []
         if last:
             # what the station reports: anything seen in its last week of data
@@ -212,6 +227,8 @@ def station_list(conn) -> list[dict]:
                 (st["code"], last["ts"] - 7 * 86400),
             ).fetchone()
             has = [c for c in VALUE_COLUMNS if counts[c]]
+            if counts["temp"] and counts["rh"] and (counts["wind10"] or counts["wind2"]):
+                has.append("net")
         first = conn.execute("SELECT MIN(ts) FROM observations WHERE station = ?", (st["code"],)).fetchone()[0]
         out.append({"code": st["code"], "lat": st["lat"], "lon": st["lon"], "first": first, "latest": latest, "metrics": has})
     return out
@@ -227,7 +244,9 @@ def readings(conn, station: str, ts_from: int | None = None, ts_to: int | None =
         sql += " AND ts <= ?"
         args.append(ts_to)
     rows = conn.execute(sql + " ORDER BY ts", args).fetchall()
-    return {c: [r[c] for r in rows] for c in ("ts", *VALUE_COLUMNS)}
+    out = {c: [r[c] for r in rows] for c in ("ts", *VALUE_COLUMNS)}
+    out["net"] = [net(r["temp"], r["rh"], _wind_for_net(r)) for r in rows]
+    return out
 
 
 def main(argv=None) -> int:

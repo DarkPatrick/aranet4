@@ -11,6 +11,7 @@
 <div class="wrap">
   <nav><a href="/">Aranet4</a><a class="here" href="/weather">Погода на Кипре</a></nav>
   <div class="meta" id="meta">загрузка…</div>
+  <div class="banner hidden" id="warn-banner"></div>
 
   <div id="map"></div>
 
@@ -33,13 +34,50 @@
 
   <div class="chart big hidden" id="c-home"></div>
   <div class="chart" id="c-temp"></div>
+  <div class="chart" id="c-net"></div>
   <div class="chart" id="c-rh"></div>
   <div class="chart" id="c-rain"></div>
   <div class="chart" id="c-wind"></div>
   <div class="chart" id="c-pres"></div>
   <div class="chart" id="c-rad"></div>
   <div class="chart" id="c-snow"></div>
-  <div class="note">Данные: Cyprus Department of Meteorology, сырые 10-минутные значения без контроля качества.</div>
+  <div class="note">«Ощущается» — эффективная температура NET (формула Грегорчука, по ней же считает метеослужба Кипра): учитывает влажность и ветер на 10 м.</div>
+
+  <h2>Море</h2>
+  <div class="panel" id="sea">нет данных</div>
+  <div class="chart" id="c-sst"></div>
+
+  <h2>Радар осадков</h2>
+  <div class="panel">
+    <div class="row">
+      <div class="quick" id="radar-tabs">
+        <button data-img="RADAR_Static.png" class="active">Сейчас</button>
+        <button data-img="RADAR_Animation.gif">Анимация</button>
+        <button data-img="RADAR_PFO_MAX_Static.png">Пафос, макс.</button>
+        <button data-img="RADAR_LCA_MAX_Static.png">Ларнака, макс.</button>
+      </div>
+      <span class="note" style="margin:0">время на картинках — UTC</span>
+    </div>
+    <img id="radar" class="radar" alt="радар осадков" loading="lazy">
+  </div>
+
+  <h2>Суточный архив с 2016 года</h2>
+  <div class="panel">
+    <div class="row">
+      <span class="tag">Станция</span>
+      <select id="clim-station" class="station"></select>
+      <span class="note" id="clim-meta" style="margin:0"></span>
+    </div>
+    <div class="note">Максимум, минимум и осадки за сутки из месячных сводок метеослужбы (только основные станции). Период и сравнение A/B — те же, что выше; для сравнения с прошлыми годами выбери «те же даты год назад» или свои даты.</div>
+  </div>
+  <div class="panel scroll hidden" id="clim-cmp-panel">
+    <table class="cmp" id="clim-cmp-table"></table>
+  </div>
+  <div class="chart" id="c-tmax"></div>
+  <div class="chart" id="c-tmin"></div>
+  <div class="chart" id="c-crain"></div>
+
+  <div class="note">Данные: Cyprus Department of Meteorology (dom.org.cy). 10-минутные значения — сырые, без контроля качества.</div>
 </div>
 
 <script src="/static/echarts.min.js"></script>

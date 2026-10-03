@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily climatological archive from dom.org.cy (new and preliminary months)
+
+[Timer]
+OnCalendar=*-*-* 09:20
+OnBootSec=5min
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

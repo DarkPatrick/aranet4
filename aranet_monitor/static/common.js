@@ -202,8 +202,8 @@ window.UI = (() => {
       if (!sB && !sA) continue;
       m.rows.map(r => typeof r === "string" ? ROWS[r] : r).forEach((r, i) => {
         const b = sB ? r.get(sB) : null, a = sA ? r.get(sA) : null;
-        const digits = r.pp ? 1 : m.digits;
-        const unit = r.pp ? "%" : m.unit;
+        const digits = r.pp ? 1 : (r.digits ?? m.digits);
+        const unit = r.pp ? "%" : (r.unit ?? m.unit);
         const d = a != null && b != null ? b - a : null;
         const pct = !r.pp && d != null && a ? 100 * d / Math.abs(a) : null;
         // only metrics with a "good" direction get colour; the rest stay neutral
@@ -237,7 +237,7 @@ window.UI = (() => {
       const m = this.m, t = params[0].axisValue;
       const gap = this.step * (m.bar ? 0.5 : 1);
       const b = nearest(this.sets.b, m.key, t, gap), a = nearest(this.sets.a, m.key, t, gap);
-      const when = ms => m.bar && this.step >= DAY ? fmtDay(ms) : fmtTime(ms);
+      const when = ms => m.daily || (m.bar && this.step >= DAY) ? fmtDay(ms) : fmtTime(ms);
       const line = (p, color, label, at) => p && p.v != null
         ? `<div>${dot(color)}${label} ${when(at)}: <b>${num(p.v, m.digits)} ${m.unit}</b></div>` : "";
       let html = line(b, css(m.color), "B", b && b.t) + line(a, css("--cmp"), "A", a && a.t - this.offset);

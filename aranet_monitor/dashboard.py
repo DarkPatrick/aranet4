@@ -7,7 +7,10 @@ GET /api/readings?from=T&to=T -> readings in [from, to], unix seconds, either bo
 GET /api/latest           -> latest reading + device status
 GET /weather              -> static/weather.html (Cyprus weather stations)
 GET /api/weather/stations -> stations with coordinates and latest observation
-GET /api/weather/readings?station=CODE&from=T&to=T -> one station's observations
+GET /api/weather/readings?station=CODE&from=T&to=T -> one station's observations (+ NET "feels like")
+GET /api/weather/marine   -> latest sea forecast, sea surface temperature history, current warnings
+GET /api/weather/climate/stations -> stations in the daily archive (since 2016)
+GET /api/weather/climate?station=CODE&from=T&to=T -> daily Tmax / Tmin / rain
 """
 
 import argparse
@@ -22,7 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import db, weather
+from . import db, dom, weather
 from .config import get_settings
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -55,6 +58,16 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(self._with_weather(weather.station_list))
             elif url.path == "/api/weather/readings":
                 self._weather_readings(parse_qs(url.query))
+            elif url.path == "/api/weather/marine":
+                self._json(self._with_weather(dom.marine))
+            elif url.path == "/api/weather/climate/stations":
+                self._json(self._with_weather(dom.climate_stations))
+            elif url.path == "/api/weather/climate":
+                q = parse_qs(url.query)
+                station = q.get("station", [""])[0]
+                if not station:
+                    raise ValueError("station is required")
+                self._json(self._with_weather(dom.climate_readings, station, *self._range(q)))
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
         except ValueError as exc:
@@ -68,7 +81,7 @@ class Handler(BaseHTTPRequestHandler):
             conn.close()
 
     def _with_weather(self, fn, *args):
-        conn = db.connect_readonly(self.weather_db, empty=weather.connect)
+        conn = db.connect_readonly(self.weather_db, empty=dom.connect)
         try:
             return fn(conn, *args)
         finally:

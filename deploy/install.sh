@@ -11,7 +11,7 @@ cd "$DIR"
 echo "==> system packages"
 APT="sudo apt-get -o DPkg::Lock::Timeout=900"  # wait for unattended-upgrades instead of failing
 $APT update -qq
-$APT install -y -qq python3-venv bluez
+$APT install -y -qq python3-venv bluez poppler-utils
 # Raspberry Pi needs pi-bluetooth to bring up the onboard BT chip; harmless to skip elsewhere
 $APT install -y -qq pi-bluetooth 2>/dev/null || true
 sudo systemctl enable --now bluetooth
@@ -28,11 +28,11 @@ if [ ! -f config.env ]; then
 fi
 
 echo "==> systemd units"
-for unit in aranet-collector.service aranet-collector.timer aranet-dashboard.service aranet-weather.service aranet-weather.timer; do
+for unit in aranet-collector.service aranet-collector.timer aranet-dashboard.service aranet-weather.service aranet-weather.timer aranet-dom-forecast.service aranet-dom-forecast.timer aranet-dom-climate.service aranet-dom-climate.timer; do
   sed -e "s|__DIR__|$DIR|g" -e "s|__USER__|$USER_NAME|g" "deploy/$unit" | sudo tee "/etc/systemd/system/$unit" >/dev/null
 done
 sudo systemctl daemon-reload
-sudo systemctl enable --now aranet-dashboard.service aranet-weather.timer
+sudo systemctl enable --now aranet-dashboard.service aranet-weather.timer aranet-dom-forecast.timer aranet-dom-climate.timer
 sudo systemctl restart aranet-dashboard.service  # pick up code updates on re-runs
 if grep -q '^ARANET_ADDRESS=..' config.env; then
   sudo systemctl enable --now aranet-collector.timer
