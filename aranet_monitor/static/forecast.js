@@ -57,10 +57,11 @@
       const p = (m.period || "").match(/^(\d{4})-(\d{2})$/);
       if (p) $("month-h").textContent = `Прошлый месяц: ${monthName(+p[1], +p[2])} ${p[1]}`;
       const tile = (label, value, sub) => `<div class="tile"><div class="label">${label}</div><div class="value">${value}</div>${sub ? `<div class="note" style="margin:0">${sub}</div>` : ""}</div>`;
+      const norm = k => m.norms && m.norms[k] ? ` ${m.norms[k]}` : "";  // baseline as the report states it
       const tiles = [
-        m.temp_anomaly != null && tile("Температура", `${signed(m.temp_anomaly, 2)}<span class="unit">°C</span>`, "к норме 1981–2010"),
-        m.rain_mm != null && tile("Осадки за месяц", `${num(m.rain_mm)}<span class="unit">мм</span>`, m.rain_pct != null ? `${num(m.rain_pct)} % нормы 1961–1990` : ""),
-        m.season_rain_mm != null && tile("С октября (гидрологический год)", `${num(m.season_rain_mm)}<span class="unit">мм</span>`, m.season_rain_pct != null ? `${num(m.season_rain_pct)} % нормы` : ""),
+        m.temp_anomaly != null && tile("Температура", `${signed(m.temp_anomaly, 2)}<span class="unit">°C</span>`, `к норме${norm("temperature")}`),
+        m.rain_mm != null && tile("Осадки за месяц", `${num(m.rain_mm)}<span class="unit">мм</span>`, m.rain_pct != null ? `${num(m.rain_pct)} % нормы${norm("rain")}` : ""),
+        m.season_rain_mm != null && tile("С октября (гидрологический год)", `${num(m.season_rain_mm)}<span class="unit">мм</span>`, m.season_rain_pct != null ? `${num(m.season_rain_pct)} % нормы${norm("rain")}` : ""),
       ].filter(Boolean).join("");
       const sec = m.sections || {};
       const more = [["events", "Заметные явления"], ["rain", "Осадки"], ["temperature", "Температура"]]

@@ -262,11 +262,16 @@ def parse_monthly(text: str, url: str = "") -> dict:
     flat = _flow(text)
     labels = [(l, k, flat.find(l + " ") if (l + ":") not in flat else flat.find(l + ":")) for l, k in MONTHLY_SECTIONS]
     found = sorted((pos, l, k) for l, k, pos in labels if pos >= 0)
-    sections = {}
+    sections, norms = {}, {}
     for i, (pos, label, key) in enumerate(found):
         end = found[i + 1][0] if i + 1 < len(found) else len(flat)
         body = flat[pos + len(label):end].lstrip(" :")
-        body = re.sub(r"^\([^)]*\):?\s*", "", body)  # "(reference period ...)"
+        # "(περίοδος αναφοράς κανονικής βροχόπτωσης: 1961-1990)": the baseline this section compares against
+        ref = re.match(r"^\(([^)]*)\)", body)
+        years = re.search(r"(\d{4})\s*[-–]\s*(\d{4})", ref.group(1)) if ref else None
+        if years:
+            norms[key] = f"{years.group(1)}–{years.group(2)}"
+        body = re.sub(r"^\([^)]*\):?\s*", "", body)
         junk = re.search(r"(?:(?<!\S)\S\s){5,}", body)  # text of rotated charts comes out letter by letter
         sections[key] = (body[:junk.start()] if junk else body).strip()
     m = re.search(r"Ο ΚΑΙΡΟΣ ΤΟΥ ([Α-ΩΆ-Ώ]+) (\d{4})", flat)
@@ -283,6 +288,7 @@ def parse_monthly(text: str, url: str = "") -> dict:
         "rain_pct": _num(rain.group(2)) if rain else None,
         "season_rain_mm": _num(season.group(2)) if season else None,
         "season_rain_pct": _num(season.group(3)) if season else None,
+        "norms": norms,  # reference periods per section, as the report states them
         "sections": sections,
     }
 
@@ -315,7 +321,7 @@ def collect_climate_docs(conn) -> None:
             continue
         url = urllib.parse.urljoin(page, url)
         row = conn.execute("SELECT data FROM climate_docs WHERE kind = ? AND url = ?", (kind, url)).fetchone()
-        if row:
+        if row and (kind != "monthly" or "norms" in json.loads(row[0])):  # "norms" added later: re-parse older rows
             doc = json.loads(row[0])
         else:
             try:
@@ -345,7 +351,7 @@ def climate_docs(conn, cached) -> dict:
         tr = lambda t: cached(t)[0] if t else None
         item = {"url": r[0], "period": r[1], "title": tr(doc.get("title_el")) or doc.get("title_el")}
         if kind == "monthly":
-            item.update({k: doc.get(k) for k in ("temp_anomaly", "rain_mm", "rain_pct", "season_rain_mm", "season_rain_pct")})
+            item.update({k: doc.get(k) for k in ("temp_anomaly", "rain_mm", "rain_pct", "season_rain_mm", "season_rain_pct", "norms")})
             item["sections"] = {k: {"el": v, "ru": tr(v)} for k, v in doc.get("sections", {}).items()}
         else:
             item["summary"] = {"el": doc.get("summary"), "ru": tr(doc.get("summary"))}

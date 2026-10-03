@@ -112,6 +112,7 @@ def test_parse_monthly_report():
     assert m["period"] == "2026-08" and m["title_el"] == "ΑΥΓΟΥΣΤΟΥ 2026"
     assert (m["temp_anomaly"], m["rain_mm"], m["rain_pct"]) == (0.72, 30.0, 1034.0)
     assert (m["season_rain_mm"], m["season_rain_pct"]) == (608.3, 122.0)
+    assert m["norms"] == {"rain": "1961–1990", "temperature": "1981–2010"}  # read from the section headers
     assert set(m["sections"]) == {"general", "events", "rain", "temperature"}
     assert m["sections"]["general"].startswith("Ο καιρός τον Αύγουστο")
     # the rotated chart text that follows the temperature section is cut off
