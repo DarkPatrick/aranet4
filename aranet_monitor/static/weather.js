@@ -16,13 +16,22 @@
   const PRES = [["p_msl", "Давление (на уровне моря)"], ["p_qnh", "Давление (QNH)"], ["p_station", "Давление (на станции)"]];
   const pick = (opts, metrics) => opts.find(([k]) => metrics.includes(k));
 
+  // Beaufort scale, m/s upper bounds and the Russian names (WMO / Росгидромет)
+  const BEAUFORT = [
+    [0.3, "штиль"], [1.6, "тихий"], [3.4, "лёгкий"], [5.5, "слабый"], [8.0, "умеренный"], [10.8, "свежий"],
+    [13.9, "сильный"], [17.2, "крепкий"], [20.8, "очень крепкий"], [24.5, "шторм"], [28.5, "сильный шторм"],
+    [32.7, "жестокий шторм"], [Infinity, "ураган"],
+  ].map(([to, name], i) => ({ to, name, label: `${i} · ${name}` }));
+  const beaufort = v => { const i = BEAUFORT.findIndex(b => v < b.to); return `${BEAUFORT[i].name} (${i} балл${i === 1 ? "" : i > 1 && i < 5 ? "а" : "ов"})`; };
+
   const METRICS = [
     { key: "temp", el: "c-temp", title: "Температура, °C", unit: "°C", digits: 1, color: "--temp", rows: ["mean", "min", "max"] },
     { key: "net", el: "c-net", title: "Ощущается (NET), °C", unit: "°C", digits: 1, color: "--feel", rows: ["mean", "min", "max"] },
     { key: "rh", el: "c-rh", title: "Влажность, %", unit: "%", digits: 0, color: "--hum", rows: ["mean", "min", "max"] },
     { key: "rain", el: "c-rain", title: "Осадки, мм", unit: "мм", digits: 1, color: "--rain", bar: true,
       rows: ["sum", { label: "макс. за 10 мин", get: s => s.max }] },
-    { key: "wind", el: "c-wind", title: "Ветер, м/с", unit: "м/с", digits: 1, color: "--wind", zeroBased: true, rows: ["mean", "max"] },
+    { key: "wind", el: "c-wind", title: "Ветер, м/с", unit: "м/с", digits: 1, color: "--wind", zeroBased: true, rows: ["mean", "max"],
+      bands: BEAUFORT, describe: beaufort },
     { key: "pres", el: "c-pres", title: "Давление, hPa", unit: "hPa", digits: 1, color: "--pres", rows: ["mean", "min", "max"] },
     { key: "rad_global", el: "c-rad", title: "Солнечная радиация, W/m²", unit: "W/m²", digits: 0, color: "--rad", zeroBased: true, rows: ["mean", "max"] },
     { key: "snow", el: "c-snow", title: "Снег, см", unit: "см", digits: 0, color: "--hum", zeroBased: true, rows: ["mean", "max"] },
@@ -133,10 +142,10 @@
     const w = pick(WIND, st.metrics), p = pick(PRES, st.metrics);
     const tiles = [
       ["Температура", l.temp, 1, "°C"], ["Ощущается", l.net, 1, "°C"], ["Влажность", l.rh, 0, "%"], ["Осадки за 10 мин", l.rain, 1, "мм"],
-      w && [w[1], l[w[0]], 1, "м/с"], p && [p[1], l[p[0]], 1, "hPa"], ["Радиация", l.rad_global, 0, "W/m²"], ["Снег", l.snow, 0, "см"],
+      w && [w[1], l[w[0]], 1, "м/с", l[w[0]] != null ? BEAUFORT.find(b => l[w[0]] < b.to).name : ""], p && [p[1], l[p[0]], 1, "hPa"], ["Радиация", l.rad_global, 0, "W/m²"], ["Снег", l.snow, 0, "см"],
     ].filter(x => x && x[1] != null);
-    $("tiles").innerHTML = tiles.map(([n, v, d, u]) =>
-      `<div class="tile"><div class="label">${n}</div><div class="value">${num(v, d)}<span class="unit">${u}</span></div></div>`).join("");
+    $("tiles").innerHTML = tiles.map(([n, v, d, u, sub]) =>
+      `<div class="tile"><div class="label">${n}</div><div class="value">${num(v, d)}<span class="unit">${u}</span></div>${sub ? `<div class="note" style="margin:0">${sub}</div>` : ""}</div>`).join("");
     const age = l.ts ? Math.round((Date.now() / 1000 - l.ts) / 60) : null;
     const since = st.first ? ` · история с ${fmtTime(st.first * 1000)}` : "";
     $("station-meta").textContent = l.ts
@@ -147,9 +156,7 @@
   // "Всё" spans both sources: the station's history and the home sensor's
   let homeFirst = null;
   function setBounds(st) {
-    const clim = climStations.find(c => c.code === climSelected);
-    const climFirst = clim ? Math.floor(new Date(clim.first + "T00:00:00").getTime() / 1000) : null;
-    const firsts = [st.first, homeFirst, climFirst].filter(Boolean);
+    const firsts = [st.first, homeFirst].filter(Boolean);
     periods.setBounds(firsts.length ? Math.min(...firsts) * 1000 : null);
   }
 
@@ -201,7 +208,7 @@
       if (m.key === "wind" && w) m.title = `${w[1]}, м/с`;
       if (m.key === "pres" && p) m.title = `${p[1]}, hPa`;
       charts[i].show(has(m));
-      if (has(m)) { charts[i].applyTheme(); charts[i].set(setB, setA, offset, b); }
+      if (has(m)) { charts[i].applyTheme(); charts[i].set(setB, setA, offset, b, { fit: fitAll() }); }
     });
 
     $("cmp-panel").classList.toggle("hidden", !a);
@@ -210,12 +217,17 @@
     home.sets = { home: toMs(homeB), out: setB };
     renderHome(b);
     renderSst();
-    loadClimate().catch(fail);
   }
+
+  const fitAll = () => periods.s.quick === "all";
 
   function renderHome(range = home.range) {
     if (!home.sets) return;
     home.range = range;
+    if (fitAll()) {
+      const firsts = [home.sets.home.ts[0], home.sets.out.ts[0]].filter(x => x != null);
+      if (firsts.length) range = [Math.min(...firsts), range[1]];
+    }
     const has = home.sets.home.ts.length > 0;
     $("c-home").classList.toggle("hidden", !has);
     if (!has) return;
@@ -298,7 +310,7 @@
     const spanB = [b[0] - widen, b[1]];
     const spanA = a ? [a[0] - widen, a[1]] : null;
     const offset = a ? b[0] - a[0] : 0;
-    sstChart.set(cut(all, spanB, 0), a ? cut(all, spanA, offset) : null, offset, spanB);
+    sstChart.set(cut(all, spanB, 0), a ? cut(all, spanA, offset) : null, offset, spanB, { fit: fitAll() });
   }
 
   // ---------- radar ----------
@@ -313,7 +325,7 @@
     const newest = Math.max(0, ...Object.values(status).filter(Boolean));
     $("radar-box").classList.toggle("hidden", !anyFresh);
     $("radar-note").textContent = anyFresh ? ""
-      : Object.keys(status).length ? `Радар метеослужбы сейчас не обновляется (последняя картинка — ${fmtDay(newest * 1000)}), поэтому не показываю его.`
+      : Object.keys(status).length ? `Радары метеослужбы работают сезонно, с 15 октября по 15 июня; сейчас новых картинок нет (последняя — ${fmtDay(newest * 1000)}). Блок появится сам, как только радар снова начнёт обновляться.`
       : "статус радара ещё не проверен — запусти aranet-dom forecast";
     document.querySelectorAll("#radar-tabs button").forEach(b => { b.disabled = !fresh(b.dataset.img); });
     if (!anyFresh) return;
@@ -359,19 +371,16 @@
     else $("clim-meta").textContent = "архив ещё не загружен — запусти aranet-dom climate";
   }
 
+  // the archive always shows its whole history: the period filter above doesn't apply
   let climSeq = 0;
   async function loadClimate() {
     if (!climStations.length) { climCharts.forEach(c => c.show(false)); return; }
-    const b = periods.b(), a = periods.a(b);
     const seq = ++climSeq;
-    const fetchClim = r => getJSON(`/api/weather/climate?station=${encodeURIComponent(climSelected)}&${q(r)}`);
-    const [dataB, dataA] = await Promise.all([fetchClim(b), a ? fetchClim(a) : Promise.resolve(null)]);
+    const data = await getJSON(`/api/weather/climate?station=${encodeURIComponent(climSelected)}`);
     if (seq !== climSeq) return;
-    const offset = a ? b[0] - a[0] : 0;
-    const setB = toMs(dataB), setA = dataA ? toMs(dataA, offset) : null;
-    climCharts.forEach(c => { c.show(true); c.set(setB, setA, offset, b); });
-    $("clim-cmp-panel").classList.toggle("hidden", !a);
-    if (a) renderCompareTable($("clim-cmp-table"), CLIM, dataB, dataA);
+    const set = toMs(data);
+    const range = set.ts.length ? [set.ts[0], Math.max(set.ts[set.ts.length - 1] + DAY, Date.now())] : [Date.now() - DAY, Date.now()];
+    climCharts.forEach(c => { c.show(true); c.set(set, null, 0, range); });
   }
 
   const fail = e => { $("meta").textContent = "ошибка загрузки: " + e.message; };
@@ -380,6 +389,7 @@
   async function refresh() {
     try {
       await loadClimStations();
+      loadClimate().catch(fail);
       loadMarine().then(showRadar).catch(fail);
       if (!(await loadStations())) return;
       periods.sync();

@@ -1,6 +1,7 @@
 // Shared dashboard pieces: period B / comparison A controls, stats table, charts with A/B overlay.
 window.UI = (() => {
-  const HOUR = 3600e3, DAY = 24 * HOUR;
+  const HOUR = 3600e3, DAY = 24 * HOUR, MONTH = 30 * DAY;
+  const fmtMonth = ms => new Date(ms).toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
   const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const $ = id => document.getElementById(id);
 
@@ -162,7 +163,9 @@ window.UI = (() => {
     const out = { ts: [], [key]: [] };
     if (!set) return out;
     const bucket = t => {
-      if (size >= DAY) { const d = new Date(t); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); }
+      const d = new Date(t);
+      if (size >= MONTH) return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+      if (size >= DAY) return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
       return Math.floor(t / size) * size;
     };
     let cur = null, sum = null;
@@ -224,6 +227,28 @@ window.UI = (() => {
   const SPARSE = 60; // below this many points a line chart also draws its points
   const dot = c => `<span style="display:inline-block;width:10px;height:10px;border-radius:5px;background:${c};margin-right:6px"></span>`;
 
+  // Shaded horizontal reference bands with names, from 0 up to the band holding the
+  // highest value in view (so a calm week isn't drawn on a 0-33 m/s axis).
+  // bands: [{to: upper bound, label}], ascending; the last `to` may be Infinity.
+  function bandsOption(bands, sets, key, seriesB) {
+    const vals = [sets.b, sets.a].filter(Boolean).flatMap(s => s[key]).filter(v => v != null);
+    const hi = vals.length ? Math.max(...vals) : 0;
+    let n = bands.findIndex(b => hi < b.to);
+    n = n < 0 ? bands.length - 1 : n;
+    n = Math.max(n, 2); // always show a few bands for scale
+    const top = Number.isFinite(bands[n].to) ? bands[n].to : hi * 1.1;
+    seriesB.markArea = {
+      silent: true,
+      data: bands.slice(0, n + 1).map((b, i) => [{
+        yAxis: i ? bands[i - 1].to : 0,
+        itemStyle: { color: i % 2 ? css("--band") : "transparent" },
+        // names sit in the right margin, outside the plot, so the data never covers them
+        label: { show: true, position: "right", distance: 6, color: css("--muted"), fontSize: 10, formatter: b.label },
+      }, { yAxis: Math.min(b.to, top) }]),
+    };
+    return { yAxis: { min: 0, max: top } };
+  }
+
   // One metric, B solid + A dashed (shifted onto B). `bar: true` draws sums per bucket.
   class SeriesChart {
     constructor(el, m) {
@@ -237,9 +262,11 @@ window.UI = (() => {
       const m = this.m, t = params[0].axisValue;
       const gap = this.step * (m.bar ? 0.5 : 1);
       const b = nearest(this.sets.b, m.key, t, gap), a = nearest(this.sets.a, m.key, t, gap);
-      const when = ms => m.daily || (m.bar && this.step >= DAY) ? fmtDay(ms) : fmtTime(ms);
+      const when = ms => m.bar && this.step >= MONTH ? fmtMonth(ms)
+        : m.daily || (m.bar && this.step >= DAY) ? fmtDay(ms) : fmtTime(ms);
+      const extra = v => m.describe ? ` <span style="color:${css("--muted")}">${m.describe(v)}</span>` : "";
       const line = (p, color, label, at) => p && p.v != null
-        ? `<div>${dot(color)}${label} ${when(at)}: <b>${num(p.v, m.digits)} ${m.unit}</b></div>` : "";
+        ? `<div>${dot(color)}${label} ${when(at)}: <b>${num(p.v, m.digits)} ${m.unit}</b>${extra(p.v)}</div>` : "";
       let html = line(b, css(m.color), "B", b && b.t) + line(a, css("--cmp"), "A", a && a.t - this.offset);
       if (a && b && a.v != null && b.v != null) {
         const d = b.v - a.v;
@@ -257,7 +284,7 @@ window.UI = (() => {
       const opt = {
         animation: false,
         title: { text: m.title, left: 12, top: 8, textStyle: { fontSize: 13, color: css("--text"), fontWeight: 600 } },
-        grid: { left: 56, right: 20, top: 40, bottom: 32 },
+        grid: { left: 56, right: m.bands ? 104 : 20, top: 40, bottom: 32 },
         tooltip: {
           trigger: "axis", formatter: p => this.tooltip(p), confine: true,
           backgroundColor: css("--card"), borderColor: css("--border"), textStyle: { color: css("--text") },
@@ -279,11 +306,20 @@ window.UI = (() => {
     }
 
     // setB/setA: ms-based columnar sets (A already shifted by `offset`)
-    set(setB, setA, offset, range) {
+    // fit: start the x axis at this chart's own first point instead of the period start
+    // (for "Всё": every chart begins where its data begins)
+    set(setB, setA, offset, range, { fit = false } = {}) {
       const m = this.m;
-      this.offset = offset; this.range = range;
+      this.offset = offset;
+      if (fit) {
+        const first = s => s && s.ts.length ? s.ts[s.ts.findIndex((t, i) => s[m.key][i] != null)] : null;
+        const firsts = [first(setB), first(setA)].filter(x => x != null);
+        if (firsts.length) range = [Math.min(...firsts), range[1]];
+      }
+      this.range = range;
       if (m.bar) {
-        const size = range[1] - range[0] > 3 * DAY ? DAY : HOUR;
+        const span = range[1] - range[0];
+        const size = span > 400 * DAY ? MONTH : span > 3 * DAY ? DAY : HOUR;
         this.sets = { b: bucketSum(setB, m.key, size), a: setA ? bucketSum(setA, m.key, size) : null };
         this.step = size;
       } else {
@@ -300,6 +336,7 @@ window.UI = (() => {
       const series = s => ({ data: pts(s), ...(this.m.bar ? {} : { showSymbol: !!sparse(s), symbolSize: 5 }) });
       const upd = { xAxis: { min: this.range[0], max: this.range[1] }, series: [series(this.sets.b), series(this.sets.a)] };
       if (this.m.axis) upd.yAxis = this.m.axis(this.sets);
+      if (this.m.bands) Object.assign(upd, bandsOption(this.m.bands, this.sets, this.m.key, upd.series[0]));
       this.chart.setOption(upd);
     }
 
@@ -312,6 +349,6 @@ window.UI = (() => {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => charts.forEach(c => c.applyTheme()));
   }
 
-  return { HOUR, DAY, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
+  return { HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
            Periods, toMs, nearest, typicalStep, stats, renderCompareTable, SeriesChart, linkCharts };
 })();

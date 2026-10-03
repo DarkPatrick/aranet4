@@ -66,7 +66,7 @@
     const setB = toMs(dataB), setA = a ? toMs(dataA, offset) : null;
     $("cmp-panel").classList.toggle("hidden", !a);
     if (a) renderCompareTable($("cmp-table"), METRICS, dataB, dataA);
-    charts.forEach(c => c.set(setB, setA, offset, b));
+    charts.forEach(c => c.set(setB, setA, offset, b, { fit: periods.s.quick === "all" }));
   }
 
   async function loadLatest() {
