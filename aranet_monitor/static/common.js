@@ -221,6 +221,7 @@ window.UI = (() => {
   }
 
   // ---------- charts ----------
+  const SPARSE = 60; // below this many points a line chart also draws its points
   const dot = c => `<span style="display:inline-block;width:10px;height:10px;border-radius:5px;background:${c};margin-right:6px"></span>`;
 
   // One metric, B solid + A dashed (shifted onto B). `bar: true` draws sums per bucket.
@@ -294,7 +295,10 @@ window.UI = (() => {
 
     render() {
       const pts = s => s ? s.ts.map((t, i) => [t, s[this.m.key][i]]) : [];
-      const upd = { xAxis: { min: this.range[0], max: this.range[1] }, series: [{ data: pts(this.sets.b) }, { data: pts(this.sets.a) }] };
+      // a line through one or two points draws nothing: show the points while data is sparse
+      const sparse = s => !this.m.bar && s && s.ts.length < SPARSE;
+      const series = s => ({ data: pts(s), ...(this.m.bar ? {} : { showSymbol: !!sparse(s), symbolSize: 5 }) });
+      const upd = { xAxis: { min: this.range[0], max: this.range[1] }, series: [series(this.sets.b), series(this.sets.a)] };
       if (this.m.axis) upd.yAxis = this.m.axis(this.sets);
       this.chart.setOption(upd);
     }
@@ -308,6 +312,6 @@ window.UI = (() => {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => charts.forEach(c => c.applyTheme()));
   }
 
-  return { HOUR, DAY, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
+  return { HOUR, DAY, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
            Periods, toMs, nearest, typicalStep, stats, renderCompareTable, SeriesChart, linkCharts };
 })();

@@ -1,5 +1,5 @@
 (() => {
-  const { css, $, store, fmtTime, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
+  const { SPARSE, css, $, store, fmtTime, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
   const REFRESH_MS = 5 * 60 * 1000;
   const STALE_S = 3600;
   const prefs = store("weather");
@@ -137,8 +137,9 @@
     $("tiles").innerHTML = tiles.map(([n, v, d, u]) =>
       `<div class="tile"><div class="label">${n}</div><div class="value">${num(v, d)}<span class="unit">${u}</span></div></div>`).join("");
     const age = l.ts ? Math.round((Date.now() / 1000 - l.ts) / 60) : null;
+    const since = st.first ? ` · история с ${fmtTime(st.first * 1000)}` : "";
     $("station-meta").textContent = l.ts
-      ? `${st.lat.toFixed(3)}, ${st.lon.toFixed(3)} · данные на ${fmtTime(l.ts * 1000)} (${age} мин назад)${age > 60 ? " ⚠ устарели" : ""}`
+      ? `${st.lat.toFixed(3)}, ${st.lon.toFixed(3)} · данные на ${fmtTime(l.ts * 1000)} (${age} мин назад)${age > 60 ? " ⚠ устарели" : ""}${since}`
       : "нет данных";
   }
 
@@ -206,11 +207,11 @@
     $("c-home").classList.toggle("hidden", !has);
     if (!has) return;
     home.chart.resize();
-    const pts = (s, k) => s.ts.map((t, i) => [t, s[k][i]]);
+    const line = (s, k) => ({ data: s.ts.map((t, i) => [t, s[k][i]]), showSymbol: s.ts.length < SPARSE, symbolSize: 5 });
     home.chart.setOption({
       title: { text: `Температура: дома и на улице (${label(selected)}), °C` },
       xAxis: { min: range[0], max: range[1] },
-      series: [{ data: pts(home.sets.home, "temperature") }, { data: pts(home.sets.out, "temp") }],
+      series: [line(home.sets.home, "temperature"), line(home.sets.out, "temp")],
     });
   }
 
