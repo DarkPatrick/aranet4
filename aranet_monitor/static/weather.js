@@ -1,5 +1,5 @@
 (() => {
-  const { SPARSE, DAY, css, $, store, fmtTime, fmtDay, fmtRange, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
+  const { zoomOptions, armZoom, resetZoom, SPARSE, DAY, css, $, store, fmtTime, fmtDay, fmtRange, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
   const REFRESH_MS = 5 * 60 * 1000;
   const STALE_S = 3600;
   const prefs = store("weather");
@@ -53,7 +53,9 @@
       xAxis: { type: "time", axisLine: { lineStyle: { color: css("--border") } }, axisLabel: { color: css("--muted"), hideOverlap: true } },
       yAxis: { type: "value", scale: true, axisLabel: { color: css("--muted") }, splitLine: { lineStyle: { color: css("--grid") } } },
       series: [line("дома (Aranet)", css("--home")), line("на улице", css("--temp"))],
+      ...zoomOptions(),
     }, true);
+    armZoom(home.chart);
   }
   function homeTooltip(params) {
     if (!home.sets) return "";
@@ -68,6 +70,7 @@
   }
   homeOption();
   linkCharts(charts);
+  echarts.connect([home.chart, ...charts.map(c => c.chart)]);
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { homeOption(); renderHome(); setTiles(); });
   window.addEventListener("resize", () => home.chart.resize());
 
@@ -232,6 +235,7 @@
     $("c-home").classList.toggle("hidden", !has);
     if (!has) return;
     home.chart.resize();
+    resetZoom(home.chart);
     const line = (s, k) => ({ data: s.ts.map((t, i) => [t, s[k][i]]), showSymbol: s.ts.length < SPARSE, symbolSize: 5 });
     home.chart.setOption({
       title: { text: `Температура: дома и на улице (${label(selected)}), °C` },

@@ -227,6 +227,40 @@ window.UI = (() => {
   const SPARSE = 60; // below this many points a line chart also draws its points
   const dot = c => `<span style="display:inline-block;width:10px;height:10px;border-radius:5px;background:${c};margin-right:6px"></span>`;
 
+  // ---------- drag-to-zoom ----------
+  // Drag across a chart to zoom its time axis to the selection (charts linked with
+  // echarts.connect follow); double-click resets. Off on touch screens, where a
+  // drag has to scroll the page.
+  const canZoom = window.matchMedia("(pointer: fine)").matches;
+
+  function zoomOptions() {
+    if (!canZoom) return {};
+    return {
+      // "inside" holds the zoom window; wheel and drag-to-pan stay off, as before
+      // weakFilter: the y axis re-fits to what is in view, lines still run to the edges
+      dataZoom: [{ type: "inside", xAxisIndex: 0, filterMode: "weakFilter",
+                   zoomOnMouseWheel: false, moveOnMouseMove: false, moveOnMouseWheel: false, preventDefaultMouseMove: false }],
+      // the box-select tool needs a toolbox; it is kept invisible (empty icons)
+      toolbox: { show: true, itemSize: 1, showTitle: false, right: -10, top: -10,
+                 feature: { dataZoom: { yAxisIndex: "none", icon: { zoom: "path://", back: "path://" },
+                                        brushStyle: { color: "rgba(120, 140, 170, 0.18)", borderColor: "rgba(120, 140, 170, 0.6)" } } } },
+    };
+  }
+
+  // call after every setOption(..., true): a fresh option drops the select cursor
+  function armZoom(chart) {
+    if (!canZoom) return;
+    chart.dispatchAction({ type: "takeGlobalCursor", key: "dataZoomSelect", dataZoomSelectActive: true });
+    if (!chart.__zoomReset) {
+      chart.__zoomReset = true;
+      chart.getZr().on("dblclick", () => chart.dispatchAction({ type: "dataZoom", start: 0, end: 100 }));
+    }
+  }
+
+  function resetZoom(chart) {
+    if (canZoom) chart.dispatchAction({ type: "dataZoom", start: 0, end: 100 });
+  }
+
   // Shaded horizontal reference bands with names, from 0 up to the band holding the
   // highest value in view (so a calm week isn't drawn on a 0-33 m/s axis).
   // bands: [{to: upper bound, label}], ascending; the last `to` may be Infinity.
@@ -267,7 +301,8 @@ window.UI = (() => {
       const extra = v => m.describe ? ` <span style="color:${css("--muted")}">${m.describe(v)}</span>` : "";
       const line = (p, color, label, at) => p && p.v != null
         ? `<div>${dot(color)}${label} ${when(at)}: <b>${num(p.v, m.digits)} ${m.unit}</b>${extra(p.v)}</div>` : "";
-      let html = line(b, css(m.color), "B", b && b.t) + line(a, css("--cmp"), "A", a && a.t - this.offset);
+      // "B"/"A" only mean something when there is a comparison
+      let html = line(b, css(m.color), this.sets.a ? "B" : "", b && b.t) + line(a, css("--cmp"), "A", a && a.t - this.offset);
       if (a && b && a.v != null && b.v != null) {
         const d = b.v - a.v;
         const pct = a.v ? ` (${signed(100 * d / Math.abs(a.v), 1)}%)` : "";
@@ -300,8 +335,10 @@ window.UI = (() => {
                 : series("A", css("--cmp"), { z: 2, lineStyle: { width: 1.5, type: "dashed", color: css("--cmp") } }),
         ],
       };
+      Object.assign(opt, zoomOptions());
       if (m.decorate) m.decorate(opt);
       this.chart.setOption(opt, true);
+      armZoom(this.chart);
       if (this.sets.b) this.render();
     }
 
@@ -317,6 +354,7 @@ window.UI = (() => {
         if (firsts.length) range = [Math.min(...firsts), range[1]];
       }
       this.range = range;
+      resetZoom(this.chart); // new data / new period: start unzoomed
       if (m.bar) {
         const span = range[1] - range[0];
         const size = span > 400 * DAY ? MONTH : span > 3 * DAY ? DAY : HOUR;
@@ -349,6 +387,6 @@ window.UI = (() => {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => charts.forEach(c => c.applyTheme()));
   }
 
-  return { HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
+  return { zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
            Periods, toMs, nearest, typicalStep, stats, renderCompareTable, SeriesChart, linkCharts };
 })();
