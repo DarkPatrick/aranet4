@@ -1,0 +1,10 @@
+[Unit]
+Description=Forecast bulletins from dom.org.cy every 30 minutes (issued 05:00, 11:00, 16:00)
+
+[Timer]
+OnCalendar=*:12/30
+OnBootSec=3min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

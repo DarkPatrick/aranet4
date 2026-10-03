@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Прогноз погоды</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrap">
+  <nav><a href="/weather/home">Aranet4</a><a href="/weather/outdoor">Погода на Кипре</a><a class="nav-btn here" href="/weather/outdoor/forecast">Прогноз</a></nav>
+  <div class="meta" id="meta">загрузка…</div>
+
+  <div class="panel">
+    <div class="row">
+      <span class="tag">Выпуск</span>
+      <div class="quick" id="issues"></div>
+      <span class="note" id="period" style="margin:0"></span>
+    </div>
+  </div>
+
+  <div class="panel" id="text"></div>
+
+  <div class="panel hidden" id="observed-panel">
+    <div class="tag" style="margin-bottom:6px">Фактически за сегодня</div>
+    <div class="scroll"><table class="cmp" id="observed"></table></div>
+  </div>
+
+  <h2>Таблица прогноза по районам</h2>
+  <div class="panel">
+    <div class="note">Официальная таблица метеослужбы (на английском): погода, ветер в баллах Бофорта, состояние моря и температура для внутренних районов, гор и четырёх побережий, внизу — прогноз на следующие три дня.</div>
+    <a id="table-link" target="_blank" rel="noopener"><img id="table" class="radar" alt="таблица прогноза" loading="lazy"></a>
+  </div>
+
+  <h2>Карта на завтра</h2>
+  <div class="panel">
+    <div class="note">Температуры «мин…макс», ветер (стрелка, баллы Бофорта) и волнение моря — легенда справа внизу, от «Ηρεμη» (штиль) до «Άγρια Μαινόμενη» (жестокий шторм).</div>
+    <img id="map-img" class="radar" alt="карта прогноза" loading="lazy">
+  </div>
+
+  <div class="note">Данные: Cyprus Department of Meteorology (dom.org.cy). Текст бюллетеня переводится машинно с греческого; если перевод недоступен, показывается оригинал.</div>
+</div>
+<script src="/static/forecast.js"></script>
+</body>
+</html>

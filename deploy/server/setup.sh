@@ -35,11 +35,11 @@ ARANET_WEATHER_DB=$WEATHER/weather.db
 ARANET_HOST=127.0.0.1
 ARANET_PORT=$APP_PORT
 CFG
-for unit in aranet-dashboard.service aranet-weather.service aranet-weather.timer aranet-dom-forecast.service aranet-dom-forecast.timer aranet-dom-climate.service aranet-dom-climate.timer; do
+for unit in aranet-dashboard.service aranet-weather.service aranet-weather.timer aranet-dom-forecast.service aranet-dom-forecast.timer aranet-dom-climate.service aranet-dom-climate.timer aranet-forecast.service aranet-forecast.timer; do
   sed -e "s|__DIR__|$DIR|g" -e "s|__USER__|aranet|g" "$DIR/deploy/$unit" > "/etc/systemd/system/$unit"
 done
 systemctl daemon-reload
-systemctl enable --now aranet-dashboard.service aranet-weather.timer aranet-dom-forecast.timer aranet-dom-climate.timer
+systemctl enable --now aranet-dashboard.service aranet-weather.timer aranet-dom-forecast.timer aranet-dom-climate.timer aranet-forecast.timer
 systemctl restart aranet-dashboard.service
 
 echo "==> nginx on https://$DOMAIN:$PORT"

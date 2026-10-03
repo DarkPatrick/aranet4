@@ -99,3 +99,11 @@ table.coast td:nth-child(n) { min-width: 70px; }
   .alert.lvl3 { background: #3d2610; border-color: #d0741a; color: #f7c58f; }
   .alert.lvl4 { background: #3d1515; border-color: #d04545; color: #f5b3b3; }
 }
+
+/* "Прогноз" button, top right */
+nav .nav-btn { margin-left: auto; align-self: center; font-size: 14px; font-weight: 600; color: var(--text);
+               border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 5px 14px; }
+nav .nav-btn:hover { border-color: var(--text); }
+nav a.nav-btn.here { font-size: 14px; background: var(--text); color: var(--card); border-color: var(--text); }
+p.synopsis { font-weight: 600; }
+.tile .value { white-space: nowrap; }
