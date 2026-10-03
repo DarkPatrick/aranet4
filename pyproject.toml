@@ -14,7 +14,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=8"]
+test = ["pytest>=8", "openpyxl>=3.1"]
+import = ["openpyxl>=3.1"]
 
 [project.scripts]
 aranet-collect = "aranet_monitor.collector:main"
@@ -23,6 +24,7 @@ aranet-sync = "aranet_monitor.sync:main"
 aranet-weather = "aranet_monitor.weather:main"
 aranet-dom = "aranet_monitor.dom:main"
 aranet-forecast = "aranet_monitor.forecast:main"
+aranet-import = "aranet_monitor.importer:main"
 
 [tool.setuptools.packages.find]
 include = ["aranet_monitor*"]

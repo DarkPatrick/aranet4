@@ -1,0 +1,4 @@
+Time(DD/MM/YYYY h:mm:ss A),Carbon dioxide(ppm),Temperature(°C),Relative humidity(%),Atmospheric pressure(mmHg)
+"05/07/2026 11:35:23 PM","873","30.0","69","751"
+"05/07/2026 11:40:23 PM","848","30.0","69","751"
+"05/07/2026 11:45:23 PM","895","30.0","69","751"
