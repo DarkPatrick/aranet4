@@ -80,3 +80,24 @@ exit
 API: `GET /api/readings?hours=24` или `?from=<unix>&to=<unix>` (без параметров — всё), `GET /api/latest`.
 
 Чтобы копить точки ровно раз в 10 минут, поменяй интервал записи в приложении Aranet на 10 мин. Иначе в базу попадает каждая точка, которую записал датчик (по умолчанию раз в 5 минут).
+
+## Дашборд на публичном сервере (опционально)
+
+Pi после каждого сбора отправляет согласованную копию базы на сервер (`aranet-sync`: rsync по ssh отдельным ключом). На сервере тот же дашборд работает в режиме только чтения, за nginx с HTTPS и паролем.
+
+На сервере (root, нужен сертификат Let's Encrypt для домена в `/etc/letsencrypt/live/<домен>/`):
+
+```bash
+git clone https://github.com/DarkPatrick/aranet4.git /opt/aranet4
+/opt/aranet4/deploy/server/setup.sh <домен> <https-порт> "<публичный ключ Pi>"
+```
+
+Скрипт создаёт пользователя `aranet`, которому разрешено только класть файлы в `/home/aranet/data` (`rrsync -wo`), сервис дашборда на `127.0.0.1:8091` и nginx на `<https-порт>` с basic auth (пароль печатается один раз). Ещё он добавляет хук, который перезагружает nginx после продления сертификата. nginx не занимает порт 80, потому что certbot продлевает сертификат своим standalone-сервером.
+
+На Pi:
+
+```bash
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519_aranet_sync   # публичный ключ передать в setup.sh
+echo "ARANET_SYNC_TARGET=aranet@<домен>:aranet.db" >> config.env
+./deploy/install.sh                                              # пересобрать юниты (ExecStartPost=aranet-sync)
+```
