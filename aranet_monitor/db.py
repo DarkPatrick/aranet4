@@ -97,7 +97,9 @@ def latest(conn) -> dict:
     status = conn.execute(
         "SELECT ts, name, version, battery, interval FROM device_status ORDER BY ts DESC LIMIT 1"
     ).fetchone()
+    bounds = conn.execute("SELECT MIN(ts) AS first, MAX(ts) AS last FROM readings").fetchone()
     return {
+        "range": dict(bounds),
         "reading": dict(reading) if reading else None,
         "status": dict(status) if status else None,
     }

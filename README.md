@@ -6,6 +6,8 @@
 
 - **collector** (`aranet-collect`): подключается к датчику и забирает всю историю, которую тот записал с последней сохранённой точки. Поэтому если Pi был выключен, пропуск заполнится из памяти датчика (Aranet4 хранит примерно 5000 точек, это около 17 дней при шаге 5 минут). Плюс текущие показания и батарея. Запускается раз в 10 минут через systemd timer, на Mac можно с `--loop`.
 - **dashboard** (`aranet-dashboard`): маленький HTTP-сервер на стандартной библиотеке Python. Отдаёт JSON API и страницу с графиками CO₂ / температуры / влажности / давления. ECharts лежит в репозитории, интернет не нужен.
+  - период B: быстрые кнопки (6 ч / 24 ч / 7 дн / 30 дн / всё) или свои даты «с / по»;
+  - сравнение с периодом A: предыдущий период той же длины, сутки / неделю / год назад или свои даты. A рисуется пунктиром поверх B, над графиками таблица «среднее / мин / макс / доля времени CO₂ > 1000 и > 1400 ppm» с A, B, Δ и Δ%.
 
 Из зависимостей только [`aranet4`](https://github.com/Anrijs/Aranet4-Python) (тянет `bleak`). Работает на macOS и Linux (BlueZ).
 
@@ -44,7 +46,23 @@ journalctl -u aranet-dashboard -f                 # логи дашборда
 sudo systemctl start aranet-collector             # собрать прямо сейчас
 ```
 
-Если Linux не может прочитать историю (`history read failed` в логе), сопряги датчик один раз: `bluetoothctl` → `pair <MAC>` и введи PIN с экрана Aranet.
+### Сопряжение с датчиком (один раз)
+
+Aranet4 отдаёт историю только сопряжённому устройству и при первом подключении показывает на экране 6-значный PIN. На Pi PIN вводится в `bluetoothctl`, ставить датчик рядом с Pi:
+
+```bash
+bluetoothctl
+# дальше внутри bluetoothctl:
+agent KeyboardOnly
+default-agent
+scan on                 # подожди строку "Aranet4 XXXXX", запомни MAC
+scan off
+pair AA:BB:CC:DD:EE:FF  # на экране Aranet появится PIN → введи его на "Enter passkey"
+trust AA:BB:CC:DD:EE:FF
+exit
+```
+
+После этого проверь, что сбор работает: `.venv/bin/aranet-collect`. В логе должно быть `stored N new point(s) (N read from history)`, а не `history read failed`. Сопряжение с Mac этому не мешает: датчик помнит несколько устройств.
 
 ## Настройки (`config.env`)
 
@@ -59,6 +77,6 @@ sudo systemctl start aranet-collector             # собрать прямо с
 
 Таблица `readings(ts, co2, temperature, humidity, pressure)`: `ts` — unix-время UTC, одна строка на точку, которую записал датчик. Таблица `device_status(ts, name, version, battery, interval)`: одна строка на каждый запуск сборщика.
 
-API: `GET /api/readings?hours=24` (без параметра — всё), `GET /api/latest`.
+API: `GET /api/readings?hours=24` или `?from=<unix>&to=<unix>` (без параметров — всё), `GET /api/latest`.
 
 Чтобы копить точки ровно раз в 10 минут, поменяй интервал записи в приложении Aranet на 10 мин. Иначе в базу попадает каждая точка, которую записал датчик (по умолчанию раз в 5 минут).

@@ -7,51 +7,63 @@
 <style>
   :root {
     --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --muted: #6b7280; --border: #e5e7eb;
-    --grid: #eef0f3; --good: #2e9e5b; --warn: #d9a400; --bad: #d64545;
-    --temp: #e0752d; --hum: #2f7fd1; --pres: #7a5cc7; --co2: #2e9e5b;
+    --grid: #eef0f3; --good: #2e9e5b; --warn: #d9a400; --bad: #d64545; --cmp: #8b93a1;
+    --temp: #e0752d; --hum: #2f7fd1; --pres: #7a5cc7; --co2: #2e9e5b; --head: #f1f3f6;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #12151b; --card: #1b1f27; --text: #e6e8ec; --muted: #9aa1ad; --border: #2a303b;
-      --grid: #262b35; --good: #43b874; --warn: #e3b42b; --bad: #ec6060;
-      --temp: #f08a45; --hum: #5a9ee6; --pres: #9b80e0; --co2: #43b874;
+      --grid: #262b35; --good: #43b874; --warn: #e3b42b; --bad: #ec6060; --cmp: #7d8594;
+      --temp: #f08a45; --hum: #5a9ee6; --pres: #9b80e0; --co2: #43b874; --head: #222733;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   .wrap { max-width: 1200px; margin: 0 auto; padding: 16px; }
-  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; justify-content: space-between; }
   h1 { font-size: 20px; margin: 0; }
-  .meta { color: var(--muted); font-size: 13px; }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 16px 0; }
   .tile { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
   .tile .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
   .tile .value { font-size: 28px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
   .tile .unit { font-size: 14px; color: var(--muted); font-weight: 400; margin-left: 4px; }
   .tile.co2 { border-left: 4px solid var(--border); }
-  .ranges { display: flex; gap: 6px; flex-wrap: wrap; }
-  .ranges button { background: var(--card); color: var(--text); border: 1px solid var(--border);
-                   border-radius: 6px; padding: 5px 12px; cursor: pointer; font: inherit; }
-  .ranges button.active { background: var(--text); color: var(--card); border-color: var(--text); }
+
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  .row + .row { margin-top: 10px; }
+  .row .tag { font-weight: 600; min-width: 92px; }
+  .quick { display: flex; gap: 6px; flex-wrap: wrap; }
+  button, select, input[type=date] {
+    background: var(--card); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 10px; font: inherit; }
+  button { cursor: pointer; }
+  button.active { background: var(--text); color: var(--card); border-color: var(--text); }
+  input[type=date] { color-scheme: light dark; }
+  label { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); }
+  .swatch { display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--text); vertical-align: middle; margin-right: 4px; }
+  .swatch.a { border-top: 2px dashed var(--cmp); }
+  .hidden { display: none !important; }
+
+  table.cmp { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.cmp th, table.cmp td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+  table.cmp th { background: var(--head); font-weight: 600; font-size: 12px; color: var(--muted); }
+  table.cmp th:first-child, table.cmp td:first-child { text-align: left; }
+  table.cmp td.metric { font-weight: 600; }
+  table.cmp tr.first td { border-top: 2px solid var(--border); }
+  .pos-good { color: var(--good); } .pos-bad { color: var(--bad); } .neutral { color: var(--muted); }
+  .scroll { overflow-x: auto; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
   .chart { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
            height: 260px; margin-bottom: 12px; }
   .chart.big { height: 320px; }
-  .empty { padding: 40px; text-align: center; color: var(--muted); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <h1 id="title">Aranet4</h1>
-    <div class="ranges" id="ranges">
-      <button data-h="6">6 ч</button>
-      <button data-h="24" class="active">24 ч</button>
-      <button data-h="168">7 дн</button>
-      <button data-h="720">30 дн</button>
-      <button data-h="all">Всё</button>
-    </div>
-  </header>
+  <h1>Aranet4</h1>
   <div class="meta" id="meta">загрузка…</div>
 
   <div class="tiles">
@@ -62,12 +74,46 @@
     <div class="tile"><div class="label">Батарея</div><div class="value"><span id="v-bat">–</span><span class="unit">%</span></div></div>
   </div>
 
-  <div id="charts">
-    <div class="chart big" id="c-co2"></div>
-    <div class="chart" id="c-temp"></div>
-    <div class="chart" id="c-hum"></div>
-    <div class="chart" id="c-pres"></div>
+  <div class="panel">
+    <div class="row">
+      <span class="tag"><span class="swatch"></span>Период B</span>
+      <div class="quick" id="quick">
+        <button data-h="6">6 ч</button>
+        <button data-h="24">24 ч</button>
+        <button data-h="168">7 дн</button>
+        <button data-h="720">30 дн</button>
+        <button data-h="all">Всё</button>
+      </div>
+      <label>с <input type="date" id="b-from"></label>
+      <label>по <input type="date" id="b-to"></label>
+    </div>
+    <div class="row">
+      <span class="tag"><span class="swatch a"></span>Сравнить с A</span>
+      <select id="cmp-mode">
+        <option value="none">без сравнения</option>
+        <option value="prev">предыдущий период той же длины</option>
+        <option value="day">те же часы сутки назад</option>
+        <option value="week">те же дни неделю назад</option>
+        <option value="year">те же даты год назад</option>
+        <option value="custom">свои даты</option>
+      </select>
+      <span id="a-custom" class="row hidden" style="margin:0">
+        <label>с <input type="date" id="a-from"></label>
+        <label>по <input type="date" id="a-to"></label>
+      </span>
+      <span class="note" id="a-label" style="margin:0"></span>
+    </div>
   </div>
+
+  <div class="panel scroll hidden" id="cmp-panel">
+    <table class="cmp" id="cmp-table"></table>
+    <div class="note">Δ = B − A, Δ% = (B − A) / A. Для доли времени с CO₂ выше порога разница в процентных пунктах (п.п.). Для CO₂ зелёным отмечено снижение. На графиках A сдвинут к началу B и нарисован пунктиром.</div>
+  </div>
+
+  <div class="chart big" id="c-co2"></div>
+  <div class="chart" id="c-temp"></div>
+  <div class="chart" id="c-hum"></div>
+  <div class="chart" id="c-pres"></div>
 </div>
 
 <script src="/static/echarts.min.js"></script>

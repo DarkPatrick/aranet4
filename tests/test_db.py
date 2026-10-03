@@ -26,9 +26,10 @@ def test_fetch_range(conn):
 
 
 def test_latest(conn):
-    assert db.latest(conn) == {"reading": None, "status": None}
+    assert db.latest(conn) == {"range": {"first": None, "last": None}, "reading": None, "status": None}
     db.insert_readings(conn, [r(10, 500), r(20, 900)])
     db.insert_status(conn, 25, "Aranet4 1A2B3", "v1.4.19", 87, 300)
     out = db.latest(conn)
     assert out["reading"]["co2"] == 900
     assert out["status"]["battery"] == 87
+    assert out["range"] == {"first": 10, "last": 20}

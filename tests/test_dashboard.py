@@ -45,6 +45,14 @@ def test_readings_window(server):
     assert len(json.loads(body)["ts"]) == 2
 
 
+def test_readings_from_to(server):
+    now = int(time.time())
+    data = json.loads(get(server + f"/api/readings?from={now - 4 * 3600}&to={now - 3600}")[2])
+    assert data["co2"] == [600]
+    data = json.loads(get(server + f"/api/readings?from={now - 3600}")[2])
+    assert data["co2"] == [900]
+
+
 def test_latest(server):
     data = json.loads(get(server + "/api/latest")[2])
     assert data["reading"]["co2"] == 900 and data["status"]["battery"] == 77
@@ -55,6 +63,8 @@ def test_latest(server):
     ("/nope", 404),
     ("/api/readings?hours=abc", 400),
     ("/api/readings?hours=-5", 400),
+    ("/api/readings?from=200&to=100", 400),
+    ("/api/readings?from=x", 400),
 ])
 def test_errors(server, path, code):
     with pytest.raises(urllib.error.HTTPError) as exc:

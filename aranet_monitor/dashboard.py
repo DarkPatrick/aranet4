@@ -3,6 +3,7 @@
 GET /                     -> static/index.html
 GET /static/<file>        -> static assets (echarts is vendored, works offline)
 GET /api/readings?hours=N -> readings for the last N hours (no param: everything)
+GET /api/readings?from=T&to=T -> readings in [from, to], unix seconds, either bound optional
 GET /api/latest           -> latest reading + device status
 """
 
@@ -57,14 +58,22 @@ class Handler(BaseHTTPRequestHandler):
             conn.close()
 
     def _readings(self, query):
-        hours = query.get("hours", [None])[0]
-        ts_from = None
-        if hours not in (None, "", "all"):
+        def param(name):
+            v = query.get(name, [None])[0]
+            return None if v in (None, "", "all") else v
+
+        hours, ts_from, ts_to = param("hours"), param("from"), param("to")
+        if hours is not None:
             h = float(hours)
             if h <= 0:
                 raise ValueError("hours must be positive")
             ts_from = int(time.time() - h * 3600)
-        rows = self._with_db(db.fetch_readings, ts_from)
+        else:
+            ts_from = int(ts_from) if ts_from is not None else None
+        ts_to = int(ts_to) if ts_to is not None else None
+        if ts_from is not None and ts_to is not None and ts_from > ts_to:
+            raise ValueError("from must be <= to")
+        rows = self._with_db(db.fetch_readings, ts_from, ts_to)
         # columnar: smaller payload and maps straight onto echarts series
         self._json({
             "ts": [r["ts"] for r in rows],
