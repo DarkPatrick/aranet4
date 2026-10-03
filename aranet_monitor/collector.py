@@ -108,12 +108,15 @@ def collect_once(address: str, db_path: str) -> int:
     try:
         data = read_device(address, db.last_ts(conn))
         db.insert_status(conn, int(time.time()), data.name, data.version, data.battery, data.interval)
-        if data.history_error:
-            log.warning("history read failed, storing the current reading only: %s", data.history_error)
         # half an interval: the same point re-derived on a later run lands within a few seconds
         min_gap = data.interval // 2
         n = db.insert_readings(conn, data.history, min_gap=min_gap)
-        n += db.insert_readings(conn, [data.current], min_gap=min_gap)
+        if data.history_error:
+            # storing the current point would move the "last stored" mark past the gap,
+            # and the next run would never back-fill it; leave it to the next run instead
+            log.warning("history read failed, nothing stored; the next run back-fills the gap: %s", data.history_error)
+        else:
+            n += db.insert_readings(conn, [data.current], min_gap=min_gap)
         c = data.current
         log.info(
             "stored %d new point(s) (%d read from history); now CO2=%s ppm T=%s C RH=%s%% P=%s hPa battery=%s%%",

@@ -99,10 +99,16 @@ def test_next_run_adds_only_new_points(fake, db_path, monkeypatch):
     assert co2s(db_path)[-3:] == [609, 700, 701]
 
 
-def test_history_failure_still_stores_current(fake, db_path):
+def test_history_failure_leaves_gap_for_next_run(fake, db_path, monkeypatch):
+    collector.collect_once("AA:BB:CC:DD:EE:FF", db_path)
+    real_time = time.time
+    monkeypatch.setattr(collector.time, "time", lambda: real_time() + 3 * INTERVAL + 3)
+    fake.log += [point(700), point(701), point(702)]
     fake.fail_history = True
-    assert collector.collect_once("AA:BB:CC:DD:EE:FF", db_path) == 1
-    assert co2s(db_path) == [609]
+    assert collector.collect_once("AA:BB:CC:DD:EE:FF", db_path) == 0  # current not stored past the gap
+    fake.fail_history = False
+    assert collector.collect_once("AA:BB:CC:DD:EE:FF", db_path) == 3
+    assert co2s(db_path)[-4:] == [609, 700, 701, 702]
 
 
 def test_missing_values_become_null(fake, db_path):
