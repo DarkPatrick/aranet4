@@ -424,24 +424,30 @@
     ]);
     if (seq !== uvSeq) return;
     sunChart.set(sunSeries(st, rb), ra ? sunSeries(st, ra, offset) : null, offset, rb);
+    // altitude correction only where it changes something (stations above ~150 m)
+    const alt = uB.elevation != null && uB.elevation >= 150;
+    UV.extra = alt ? { key: "uv_alt", label: `с поправкой на высоту ${Math.round(uB.elevation)} м`, dash: "dotted" } : null;
+    UV.title = alt ? `UV-индекс (CAMS) · точками — с поправкой на высоту ${Math.round(uB.elevation)} м` : "UV-индекс (CAMS)";
     uvChart.show(uB.ts.length > 0);
-    if (uB.ts.length) uvChart.set(toMs(uB), uA ? toMs(uA, offset) : null, offset, rb);
+    if (uB.ts.length) { uvChart.applyTheme(); uvChart.set(toMs(uB), uA ? toMs(uA, offset) : null, offset, rb); }
 
     // tiles: now / today
     const pos = sunPosition(now, st.lat, st.lon), day = sunTimes(now, st.lat, st.lon);
     const len = day.rise && day.set ? Math.round((day.set - day.rise) / 60e3) : null;
-    const uvNow = (() => { const i = uB.ts.findIndex(t => t * 1000 > now - 3600e3 && t * 1000 <= now); return i >= 0 ? uB.uv[i] : null; })();
+    const iNow = uB.ts.findIndex(t => t * 1000 > now - 3600e3 && t * 1000 <= now);
+    const uvNow = iNow >= 0 ? uB.uv[iNow] : null, uvNowAlt = iNow >= 0 ? uB.uv_alt[iNow] : null;
     const today = new Date(now).toDateString();
-    let uvMax = null, uvMaxAt = null;
-    uB.ts.forEach((t, i) => { if (new Date(t * 1000).toDateString() === today && uB.uv[i] != null && (uvMax == null || uB.uv[i] > uvMax)) { uvMax = uB.uv[i]; uvMaxAt = t * 1000; } });
+    let uvMax = null, uvMaxAt = null, uvMaxAlt = null;
+    uB.ts.forEach((t, i) => { if (new Date(t * 1000).toDateString() === today && uB.uv[i] != null && (uvMax == null || uB.uv[i] > uvMax)) { uvMax = uB.uv[i]; uvMaxAt = t * 1000; uvMaxAlt = uB.uv_alt[i]; } });
+    const altNote = v => alt && v ? ` · с высотой ${num(v, 1)}` : "";
     const tile = (label, value, sub) => `<div class="tile"><div class="label">${label}</div><div class="value">${value}</div><div class="note" style="margin:0">${sub}</div></div>`;
     $("sun-tiles").innerHTML = [
       tile("Солнце сейчас", `${pos.elevation >= 0 ? "+" : "−"}${num(Math.abs(pos.elevation), 1)}<span class="unit">°</span>`,
            `${sunPhase(pos.elevation)} · азимут ${Math.round(pos.azimuth)}° (${compass(pos.azimuth)})`),
       tile("Восход – закат", day.rise && day.set ? `${hm(day.rise)}–${hm(day.set)}` : "–",
            `${len != null ? `день ${Math.floor(len / 60)} ч ${len % 60} мин · ` : ""}полдень ${hm(day.noon)}, ${num(day.maxElevation, 0)}°`),
-      tile("UV сейчас", uvNow != null ? num(uvNow, 1) : "–", uvNow != null ? uvLabel(uvNow) : "нет данных"),
-      tile("UV максимум сегодня", uvMax != null ? num(uvMax, 1) : "–", uvMax != null ? `${uvLabel(uvMax)} · около ${hm(uvMaxAt)}` : "нет данных"),
+      tile("UV сейчас", uvNow != null ? num(uvNow, 1) : "–", uvNow != null ? uvLabel(uvNow) + altNote(uvNowAlt) : "нет данных"),
+      tile("UV максимум сегодня", uvMax != null ? num(uvMax, 1) : "–", uvMax != null ? `${uvLabel(uvMax)} · около ${hm(uvMaxAt)}${altNote(uvMaxAlt)}` : "нет данных"),
     ].join("");
     $("sun-h").textContent = `Солнце и UV · ${label(st.code)}`;
   }

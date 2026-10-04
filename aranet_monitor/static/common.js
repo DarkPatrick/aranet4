@@ -485,6 +485,10 @@ window.UI = (() => {
         ? `<div>${dot(color)}${label} ${when(at)}: <b>${num(p.v, m.digits)} ${m.unit}</b>${extra(p.v)}</div>` : "";
       // "B"/"A" only mean something when there is a comparison
       let html = line(b, css(m.color), this.sets.a ? "B" : "", b && b.t) + line(a, css("--cmp"), "A", a && a.t - this.offset);
+      if (m.extra) {
+        const x = nearest(this.sets.b, m.extra.key, t, gap);
+        if (x && x.v != null) html += `<div style="color:${css("--muted")};margin-left:16px">${m.extra.label}: <b>${num(x.v, m.digits)}</b>${m.describe ? " · " + m.describe(x.v) : ""}</div>`;
+      }
       if (a && b && a.v != null && b.v != null) {
         const d = b.v - a.v;
         const pct = a.v ? ` (${signed(100 * d / Math.abs(a.v), 1)}%)` : "";
@@ -561,8 +565,16 @@ window.UI = (() => {
       const upd = { xAxis: { min: this.range[0], max: this.range[1] }, series: [series(this.sets.b), series(this.sets.a)] };
       if (this.m.axis) upd.yAxis = this.m.axis(this.sets);
       this.bandNames = null;
+      const ex = this.m.extra;
+      if (ex && this.sets.b) {
+        // a second line of the same quantity from another column (e.g. altitude-corrected UV)
+        upd.series.push({ type: "line", silent: true, showSymbol: false, z: 4,
+          lineStyle: { width: 1.5, type: ex.dash || "dashed", color: css(ex.color || this.m.color) },
+          data: breakGaps(this.sets.b.ts.map((t, i) => [t, this.sets.b[ex.key][i]]), gapLimit(this.step)) });
+      }
       if (this.m.bands) {
-        const { labels, ...rest } = bandsOption(this.m.bands, this.sets, this.m.key, upd.series[0]);
+        const bandSets = ex && this.sets.b ? { b: { [this.m.key]: this.sets.b[this.m.key].concat(this.sets.b[ex.key]) }, a: this.sets.a } : this.sets;
+        const { labels, ...rest } = bandsOption(this.m.bands, bandSets, this.m.key, upd.series[0]);
         Object.assign(upd, rest);
         this.bandNames = labels || null;
         // physical limits of the quantity (sun elevation: ±90°) beat the rounded axis

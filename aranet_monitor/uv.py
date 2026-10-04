@@ -2,7 +2,11 @@
 via Open-Meteo's free air-quality API (non-commercial use, no key).
 
 Model data, not measurements: hourly UV index with clouds, ozone and aerosols
-(Saharan dust included) and the clear-sky value, ~0.1 degree grid. Each run fetches
+(Saharan dust included) and the clear-sky value, on a coarse grid (~0.4 degree,
+~40 km: Troodos and Prodromos share one cell), so mountains are smoothed away.
+UV rises ~6-10 % per 1000 m of altitude; `uv_alt` adds 8 %/km from sea level using
+the station's elevation from Open-Meteo's terrain model (an upper estimate: the
+model cell may already account for part of the height). Each run fetches
 yesterday..+3 days for every station in one or two requests and overwrites what it
 had: past hours settle, forecast hours get refreshed.
 
@@ -27,8 +31,14 @@ log = logging.getLogger("aranet.uv")
 API = "https://air-quality-api.open-meteo.com/v1/air-quality"
 UA = {"User-Agent": "aranet-monitor/0.1 (+https://github.com/DarkPatrick/aranet4)"}
 CHUNK = 30  # stations per request, keeps the URL short
+ALT_GAIN = 0.08  # UV increase per 1000 m of altitude
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS uv_station (
+    station   TEXT PRIMARY KEY,
+    elevation REAL                -- metres, Open-Meteo terrain model at the station
+);
+
 CREATE TABLE IF NOT EXISTS uv (
     station  TEXT NOT NULL,
     ts       INTEGER NOT NULL,   -- start of the hour, unix seconds
@@ -63,6 +73,8 @@ def fetch(stations: list[tuple], past_days: int = 1, forecast_days: int = 3) -> 
         data = [data]
     now, rows = int(time.time()), []
     for (code, _, _), loc in zip(stations, data):
+        if loc.get("elevation") is not None:
+            rows.append({"station": code, "elevation": float(loc["elevation"])})
         h = loc.get("hourly", {})
         for ts, u, c in zip(h.get("time", []), h.get("uv_index", []), h.get("uv_index_clear_sky", [])):
             if u is not None or c is not None:
@@ -71,10 +83,13 @@ def fetch(stations: list[tuple], past_days: int = 1, forecast_days: int = 3) -> 
 
 
 def store(conn, rows: list[dict]) -> int:
+    values = [r for r in rows if "ts" in r]
     with conn:
         conn.executemany(
-            "INSERT OR REPLACE INTO uv (station, ts, uv, uv_clear, fetched) VALUES (:station, :ts, :uv, :uv_clear, :fetched)", rows)
-    return len(rows)
+            "INSERT OR REPLACE INTO uv (station, ts, uv, uv_clear, fetched) VALUES (:station, :ts, :uv, :uv_clear, :fetched)", values)
+        conn.executemany("INSERT OR REPLACE INTO uv_station (station, elevation) VALUES (:station, :elevation)",
+                         [r for r in rows if "elevation" in r])
+    return len(values)
 
 
 def collect(db_path: str) -> int:
@@ -103,9 +118,14 @@ def readings(conn, station: str, ts_from: int | None = None, ts_to: int | None =
             sql += " AND ts <= ?"
             args.append(ts_to)
         rows = conn.execute(sql + " ORDER BY ts", args).fetchall()
-    except sqlite3.OperationalError:  # the collector hasn't created the table yet
-        rows = []
-    return {"ts": [r[0] for r in rows], "uv": [r[1] for r in rows], "uv_clear": [r[2] for r in rows]}
+        elev = conn.execute("SELECT elevation FROM uv_station WHERE station = ?", (station,)).fetchone()
+    except sqlite3.OperationalError:  # the collector hasn't created the tables yet
+        rows, elev = [], None
+    elevation = elev[0] if elev else None
+    k = 1 + ALT_GAIN * max(elevation or 0, 0) / 1000
+    return {"ts": [r[0] for r in rows], "uv": [r[1] for r in rows], "uv_clear": [r[2] for r in rows],
+            "elevation": elevation, "alt_gain": ALT_GAIN,
+            "uv_alt": [round(r[1] * k, 2) if r[1] is not None else None for r in rows]}
 
 
 def main(argv=None) -> int:

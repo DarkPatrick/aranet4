@@ -6,9 +6,9 @@ from aranet_monitor import dashboard, uv, weather
 
 
 def fake_response(stations):
-    return [{"latitude": lat, "longitude": lon, "hourly": {
+    return [{"latitude": lat, "longitude": lon, "elevation": 1000.0 if code == "B" else 10.0, "hourly": {
         "time": [1000, 4600, 8200], "uv_index": [0.0, 3.5, None], "uv_index_clear_sky": [0.0, 4.0, 5.0]}}
-        for _, lat, lon in stations]
+        for code, lat, lon in stations]
 
 
 def test_collect_and_read(tmp_path, monkeypatch):
@@ -29,7 +29,8 @@ def test_collect_and_read(tmp_path, monkeypatch):
     assert uv.collect(path) == 6  # refresh overwrites, no duplicates
     assert calls == [["A", "B"], ["A", "B"]]
     data = uv.readings(uv.connect(path), "B", 2000)
-    assert data == {"ts": [4600, 8200], "uv": [3.5, None], "uv_clear": [4.0, 5.0]}
+    assert (data["ts"], data["uv"], data["uv_clear"]) == ([4600, 8200], [3.5, None], [4.0, 5.0])
+    assert data["elevation"] is None  # fake_fetch here doesn't report elevations
 
 
 def test_fetch_parses_multi_location(monkeypatch):
@@ -49,7 +50,16 @@ def test_fetch_parses_multi_location(monkeypatch):
     monkeypatch.setattr(uv.urllib.request, "urlopen", fake_urlopen)
     rows = uv.fetch(stations)
     assert "latitude=34.7000%2C35.1000" in seen["url"] and "uv_index_clear_sky" in seen["url"]
-    assert {(r["station"], r["ts"]) for r in rows} == {(s, t) for s in "AB" for t in (1000, 4600, 8200)}
+    assert {(r["station"], r["ts"]) for r in rows if "ts" in r} == {(s, t) for s in "AB" for t in (1000, 4600, 8200)}
+    assert {r["station"]: r["elevation"] for r in rows if "elevation" in r} == {"A": 10.0, "B": 1000.0}
+
+
+def test_altitude_correction(tmp_path):
+    conn = uv.connect(str(tmp_path / "w.db"))
+    uv.store(conn, [{"station": "T", "elevation": 1900.0},
+                    {"station": "T", "ts": 3600, "uv": 5.0, "uv_clear": 6.0, "fetched": 1}])
+    d = uv.readings(conn, "T")
+    assert d["elevation"] == 1900.0 and d["uv_alt"] == [round(5.0 * (1 + 0.08 * 1.9), 2)]  # 5.76
 
 
 def test_api_uv(tmp_path):
