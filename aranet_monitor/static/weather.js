@@ -388,9 +388,9 @@
 
   // ---------- sun and UV (for the selected station's coordinates) ----------
   const SUN = { key: "elev", title: "Высота солнца над горизонтом, °", unit: "°", digits: 0, color: "--sun", rows: ["max"],
-                bands: sunBands(), describe: v => sunPhase(v), limits: [-90, 90] };
+                bands: sunBands(), describe: v => sunPhase(v), limits: [-90, 90], nowLine: true };
   const UV = { key: "uv", title: "UV-индекс (CAMS)", unit: "", digits: 1, color: "--uv", zeroBased: true, rows: ["mean", "max"],
-               bands: uvBands(), describe: v => uvLabel(v) };
+               bands: uvBands(), describe: v => uvLabel(v), nowLine: true };
   const sunChart = new SeriesChart($("c-sun"), SUN), uvChart = new SeriesChart($("c-uv"), UV);
   // thin twilight bands can't carry a name inside the chart: list them under it
   const drawSunLegend = () => { $("sun-legend").innerHTML = sunLegend().map(([c, name, range]) =>

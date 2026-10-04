@@ -571,6 +571,17 @@ window.UI = (() => {
           upd.yAxis.max = Math.min(upd.yAxis.max, this.m.limits[1]);
         }
       }
+      // dashed "now" line for charts that reach into the forecast
+      if (this.m.nowLine) {
+        const now = Date.now(), inView = now >= this.range[0] && now <= this.range[1];
+        upd.series.push({
+          type: "line", data: [], silent: true, tooltip: { show: false },
+          markLine: { silent: true, symbol: "none", animation: false,
+                      lineStyle: { type: "dashed", width: 1.5, color: css("--text"), opacity: 0.55 },
+                      label: { formatter: "сейчас", position: "end", distance: 2, color: css("--muted"), fontSize: 11 },
+                      data: inView ? [{ xAxis: now }] : [] },
+        });
+      }
       this.chart.setOption(upd);
       this.placeBandNames();
     }
