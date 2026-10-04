@@ -310,9 +310,12 @@ window.UI = (() => {
   const humidex = (t, rh) => t == null || rh == null ? null
     : t + 0.5555 * (6.112 * Math.pow(10, 7.5 * t / (237.7 + t)) * rh / 100 - 10);
   // [upper bound, short label for the chart margin, full description]
-  const HUMIDEX_SCALE = [[20, "ниже шкалы", "ниже 20, шкала не применяется"], [30, "комфортно", "без дискомфорта"],
-                         [40, "заметный", "заметный дискомфорт"], [46, "сильный", "сильный дискомфорт"],
-                         [54, "опасно", "опасно"], [Infinity, "тепл. удар", "угроза теплового удара"]];
+  // the official Environment Canada scale has just these steps (it starts at 20)
+  const HUMIDEX_SCALE = [[20, "ниже шкалы (< 20)", "ниже 20, шкала не применяется"],
+                         [30, "без дискомфорта (20–29)", "без дискомфорта"],
+                         [40, "некоторый дискомфорт (30–39)", "некоторый дискомфорт"],
+                         [46, "сильный дискомфорт (40–45)", "сильный дискомфорт, избегать нагрузок"],
+                         [Infinity, "опасно (46+)", "опасно, возможен тепловой удар"]];
   const humidexLabel = h => HUMIDEX_SCALE.find(([to]) => h < to)[2];
   const humidexBands = () => HUMIDEX_SCALE.map(([to, label], i) => ({ from: i ? HUMIDEX_SCALE[i - 1][0] : -Infinity, to, label }));
 
@@ -358,9 +361,27 @@ window.UI = (() => {
              clothing: Object.values(CLOTHING).find(([c]) => c === clo)[1] };
   }
 
+  // band names sit inside the plot, top-left of their band, on a translucent pad so
+  // they stay readable over the line (the right margin was too narrow for them)
+  const bandLabel = text => ({
+    show: true, position: "insideTopLeft", distance: 4, formatter: text, fontSize: 10, color: css("--muted"),
+    backgroundColor: css("--card"), padding: [1, 4], borderRadius: 3,
+  });
+
   // Shaded horizontal reference bands with names, from 0 up to the band holding the
   // highest value in view (so a calm week isn't drawn on a 0-33 m/s axis).
   // bands: [{to: upper bound, label}], ascending; the last `to` may be Infinity.
+  // Bands: shading behind the data (markArea on the B series); the names are drawn by
+  // the chart as `graphic` text on top (markArea labels always end up under the line).
+  // A band thinner than ~8 % of the axis gets no name: it wouldn't fit.
+  function bandLayers(spans, range, seriesB) {
+    seriesB.markArea = {
+      silent: true, label: { show: false },
+      data: spans.map(({ from, to, i }) => [{ yAxis: from, itemStyle: { color: i % 2 ? css("--band") : "transparent" } }, { yAxis: to }]),
+    };
+    return spans.filter(({ from, to }) => (to - from) / (range[1] - range[0]) >= 0.08);
+  }
+
   function bandsOption(bands, sets, key, seriesB) {
     const vals = [sets.b, sets.a].filter(Boolean).flatMap(s => s[key]).filter(v => v != null);
     if (bands[0].from !== undefined) return rangeBands(bands, vals, seriesB);
@@ -369,16 +390,8 @@ window.UI = (() => {
     n = n < 0 ? bands.length - 1 : n;
     n = Math.max(n, 2); // always show a few bands for scale
     const top = Number.isFinite(bands[n].to) ? bands[n].to : hi * 1.1;
-    seriesB.markArea = {
-      silent: true,
-      data: bands.slice(0, n + 1).map((b, i) => [{
-        yAxis: i ? bands[i - 1].to : 0,
-        itemStyle: { color: i % 2 ? css("--band") : "transparent" },
-        // names sit in the right margin, outside the plot, so the data never covers them
-        label: { show: true, position: "right", distance: 6, color: css("--muted"), fontSize: 10, formatter: b.label },
-      }, { yAxis: Math.min(b.to, top) }]),
-    };
-    return { yAxis: { min: 0, max: top } };
+    const spans = bands.slice(0, n + 1).map((b, i) => ({ from: i ? bands[i - 1].to : 0, to: Math.min(b.to, top), label: b.label, i }));
+    return { yAxis: { min: 0, max: top }, labels: bandLayers(spans, [0, top], seriesB) };
   }
 
   // Bands with explicit {from, to} that don't start at zero (pressure): the axis
@@ -387,15 +400,9 @@ window.UI = (() => {
     if (!vals.length) return {};
     const lo = Math.min(...vals), hi = Math.max(...vals), pad = Math.max(1, (hi - lo) * 0.15);
     const view = [Math.floor(lo - pad), Math.ceil(hi + pad)];
-    seriesB.markArea = {
-      silent: true,
-      data: bands.map((b, i) => [b, i]).filter(([b]) => b.to > view[0] && b.from < view[1]).map(([b, i]) => [{
-        yAxis: Math.max(b.from, view[0]),
-        itemStyle: { color: i % 2 ? css("--band") : "transparent" },
-        label: { show: true, position: "right", distance: 6, color: css("--muted"), fontSize: 10, formatter: b.label },
-      }, { yAxis: Math.min(b.to, view[1]) }]),
-    };
-    return { yAxis: { min: view[0], max: view[1] } };
+    const spans = bands.map((b, i) => ({ ...b, i })).filter(b => b.to > view[0] && b.from < view[1])
+      .map(b => ({ from: Math.max(b.from, view[0]), to: Math.min(b.to, view[1]), label: b.label, i: b.i }));
+    return { yAxis: { min: view[0], max: view[1] }, labels: bandLayers(spans, view, seriesB) };
   }
 
   // One metric, B solid + A dashed (shifted onto B). `bar: true` draws sums per bucket.
@@ -434,7 +441,7 @@ window.UI = (() => {
       const opt = {
         animation: false,
         title: { text: m.title, left: 12, top: 8, textStyle: { fontSize: 13, color: css("--text"), fontWeight: 600 } },
-        grid: { left: 56, right: m.bands ? 104 : 20, top: 40, bottom: 32 },
+        grid: { left: 56, right: 20, top: 40, bottom: 32 },
         tooltip: {
           trigger: "axis", formatter: p => this.tooltip(p), confine: true,
           backgroundColor: css("--card"), borderColor: css("--border"), textStyle: { color: css("--text") },
@@ -493,16 +500,37 @@ window.UI = (() => {
       const series = s => ({ data: pts(s), ...(this.m.bar ? {} : { showSymbol: !!sparse(s), symbolSize: 5 }) });
       const upd = { xAxis: { min: this.range[0], max: this.range[1] }, series: [series(this.sets.b), series(this.sets.a)] };
       if (this.m.axis) upd.yAxis = this.m.axis(this.sets);
-      if (this.m.bands) Object.assign(upd, bandsOption(this.m.bands, this.sets, this.m.key, upd.series[0]));
+      this.bandNames = null;
+      if (this.m.bands) {
+        const { labels, ...rest } = bandsOption(this.m.bands, this.sets, this.m.key, upd.series[0]);
+        Object.assign(upd, rest);
+        this.bandNames = labels || null;
+      }
       this.chart.setOption(upd);
+      this.placeBandNames();
     }
 
-    show(on) { this.el.classList.toggle("hidden", !on); if (on) this.chart.resize(); }
+    // band names as graphic text at the top-left of each band, above everything else
+    placeBandNames() {
+      if (!this.range) return;
+      const names = this.bandNames || [];
+      // x from the grid itself: the time axis may be zoomed, the left edge stays put
+      const rect = this.chart.getModel().getComponent("grid").coordinateSystem.getRect();
+      const elements = names.map(({ to, label }) => {
+        const y = this.chart.convertToPixel({ yAxisIndex: 0 }, to);
+        return { type: "text", silent: true, z: 100, left: rect.x + 6, top: Math.max(rect.y, y) + 3,
+                 style: { text: label, fill: css("--muted"), font: "10px sans-serif",
+                          backgroundColor: css("--card"), padding: [1, 4], borderRadius: 3 } };
+      });
+      this.chart.setOption({ graphic: { elements } }, { replaceMerge: ["graphic"] });
+    }
+
+    show(on) { this.el.classList.toggle("hidden", !on); if (on) { this.chart.resize(); this.placeBandNames(); } }
   }
 
   function linkCharts(charts) {
     echarts.connect(charts.map(c => c.chart));
-    window.addEventListener("resize", () => charts.forEach(c => c.chart.resize()));
+    window.addEventListener("resize", () => charts.forEach(c => { c.chart.resize(); if (c.placeBandNames) c.placeBandNames(); }));
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => charts.forEach(c => c.applyTheme()));
   }
 
