@@ -90,8 +90,8 @@
     }
     $("v-co2").textContent = reading.co2 ?? "–";
     $("v-temp").textContent = reading.temperature != null ? reading.temperature.toFixed(1) : "–";
-    const c = comfort(reading.temperature, reading.humidity, new Date(reading.ts * 1000));
-    $("v-comfort").textContent = c ? `PMV ${signed(c.pmv, 1)} · ${c.label} (${Math.round(c.ppd)} % недовольных)` : "";
+    lastReading = reading;
+    renderComfort();
     const h = humidex(reading.temperature, reading.humidity);
     $("v-humidex").textContent = h == null ? "–" : Math.round(h);
     $("v-humidex-sub").textContent = h == null ? "" : humidexLabel(h);
@@ -112,6 +112,22 @@
     const stale = ageMin > 30 ? " ⚠ данные устарели" : "";
     const device = status && status.name ? `${status.name} · ` : "";
     $("meta").textContent = `${device}последнее измерение: ${fmtTime(reading.ts * 1000)} (${ageMin} мин назад)${stale}`;
+  }
+
+  // comfort: neutral temperature for the chosen clothing and how far the room is from it
+  const prefs = UI.store("aranet");
+  let lastReading = null;
+  $("clothing").value = prefs.get("clothing", "auto");
+  $("clothing").addEventListener("change", () => { prefs.set("clothing", $("clothing").value); renderComfort(); });
+  function renderComfort() {
+    const r = lastReading, choice = $("clothing").value;
+    const c = r && comfort(r.temperature, r.humidity, new Date(r.ts * 1000), choice);
+    if (!c) { $("v-comfort").textContent = ""; return; }
+    const d = Math.abs(c.delta) < 0.3 ? "ровно в комфортной точке"
+      : `на ${num(Math.abs(c.delta), 1)}° ${c.delta > 0 ? "теплее" : "холоднее"} идеальных ${num(c.neutral, 1)}°`;
+    $("v-comfort").textContent = `${c.label} · ${d}`;
+    $("v-comfort").title = `PMV ${signed(c.pmv, 2)} (ISO 7730), ${Math.round(c.ppd)} % недовольных; одежда: ${c.clothing}, сидя, неподвижный воздух`;
+    $("clothing").options[0].textContent = `авто: ${Object.is(choice, "auto") ? c.clothing : "по сезону"}`;
   }
 
   const fail = e => { $("meta").textContent = "ошибка загрузки: " + e.message; };

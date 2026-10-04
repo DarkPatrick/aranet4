@@ -13,7 +13,10 @@
 
   <div class="tiles">
     <div class="tile co2" id="tile-co2"><div class="label">CO₂</div><div class="value"><span id="v-co2">–</span><span class="unit">ppm</span></div></div>
-    <div class="tile"><div class="label">Температура</div><div class="value"><span id="v-temp">–</span><span class="unit">°C</span></div><div class="note" id="v-comfort" style="margin:0" title="Индекс комфорта PMV (ISO 7730): от −3 «холодно» до +3 «жарко»; в скобках — доля недовольных (PPD)"></div></div>
+    <div class="tile"><div class="label">Температура</div><div class="value"><span id="v-temp">–</span><span class="unit">°C</span></div><div class="note" id="v-comfort" style="margin:0" title="Индекс комфорта PMV (ISO 7730)"></div>
+      <label class="mini">одежда <select id="clothing">
+        <option value="auto">авто: по сезону</option><option value="light">лёгкая</option>
+        <option value="medium">средняя</option><option value="warm">тёплая</option></select></label></div>
     <div class="tile"><div class="label">Humidex</div><div class="value"><span id="v-humidex">–</span></div><div class="note" id="v-humidex-sub" style="margin:0"></div></div>
     <div class="tile"><div class="label">Влажность</div><div class="value"><span id="v-hum">–</span><span class="unit">%</span></div></div>
     <div class="tile"><div class="label">Давление</div><div class="value"><span id="v-pres">–</span><span class="unit">мм рт. ст.</span></div><div class="note" id="v-pres-sub" style="margin:0"></div></div>
@@ -30,7 +33,7 @@
   <div class="chart big" id="c-co2"></div>
   <div class="chart" id="c-temp"></div>
   <div class="chart" id="c-humidex"></div>
-  <div class="note">Humidex — «ощущаемая» температура с учётом влажности (шкала Environment Canada): до 30 дискомфорта нет, 30–39 — заметный, 40–45 — сильный, от 46 — опасно. Комфорт под плиткой температуры — индекс PMV (ISO 7730) для человека, который сидит в домашней одежде по сезону (лёгкая летом, тёплая зимой), при неподвижном воздухе; от −3 «холодно» до +3 «жарко», в скобках — доля людей, которым было бы некомфортно.</div>
+  <div class="note">Humidex — «ощущаемая» температура с учётом влажности (шкала Environment Canada): до 30 дискомфорта нет, 30–39 — заметный, 40–45 — сильный, от 46 — опасно. Под плиткой температуры — оценка комфорта по модели PMV (ISO 7730): при какой температуре человеку, который сидит в выбранной одежде при неподвижном воздухе и такой же влажности, было бы ровно нейтрально, и насколько сейчас теплее или холоднее. «По сезону» — лёгкая одежда с мая по сентябрь, средняя в апреле и октябре, тёплая с ноября по март.</div>
   <div class="chart" id="c-hum"></div>
   <div class="chart" id="c-pres"></div>
   <div class="note" id="pres-note"></div>

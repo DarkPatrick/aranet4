@@ -344,10 +344,18 @@ window.UI = (() => {
   const clothing = date => { const m = date.getMonth() + 1; return m >= 5 && m <= 9 ? 0.5 : m === 4 || m === 10 ? 0.7 : 1.0; };
   const PMV_LABELS = [[-2.5, "холодно"], [-1.5, "прохладно"], [-0.5, "слегка прохладно"], [0.5, "нейтрально"],
                       [1.5, "слегка тепло"], [2.5, "тепло"], [Infinity, "жарко"]];
-  function comfort(t, rh, date = new Date()) {
+  const CLOTHING = { light: [0.5, "лёгкая"], medium: [0.7, "средняя"], warm: [1.0, "тёплая"] };
+  // clo: a CLOTHING key, or "auto" (by season)
+  function comfort(t, rh, date = new Date(), choice = "auto") {
     if (t == null || rh == null) return null;
-    const clo = clothing(date), r = pmv(t, t, 0.1, rh, 1.1, clo);
-    return { ...r, clo, label: PMV_LABELS.find(([to]) => r.pmv < to)[1] };
+    const clo = CLOTHING[choice] ? CLOTHING[choice][0] : clothing(date);
+    const at = x => pmv(x, x, 0.1, rh, 1.1, clo).pmv;
+    // the air temperature at which PMV = 0 for this humidity and clothing
+    let lo = 5, hi = 40;
+    for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; at(mid) < 0 ? lo = mid : hi = mid; }
+    const r = pmv(t, t, 0.1, rh, 1.1, clo);
+    return { ...r, clo, neutral: lo, delta: t - lo, label: PMV_LABELS.find(([to]) => r.pmv < to)[1],
+             clothing: Object.values(CLOTHING).find(([c]) => c === clo)[1] };
   }
 
   // Shaded horizontal reference bands with names, from 0 up to the band holding the
