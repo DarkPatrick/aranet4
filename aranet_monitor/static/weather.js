@@ -1,5 +1,5 @@
 (() => {
-  const { breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, zoomOptions, armZoom, resetZoom, SPARSE, DAY, css, $, store, fmtTime, fmtDay, fmtRange, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
+  const { sunPosition, sunTimes, sunPhase, sunBands, compass, uvLabel, uvBands, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, zoomOptions, armZoom, resetZoom, SPARSE, DAY, css, $, store, fmtTime, fmtDay, fmtRange, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
   const REFRESH_MS = 5 * 60 * 1000;
   const STALE_S = 3600;
   const prefs = store("weather");
@@ -227,6 +227,7 @@
     home.sets = { home: toMs(homeB), out: setB };
     renderHome(b);
     renderSst();
+    loadSunUv().catch(fail);
   }
 
   const fitAll = () => periods.s.quick === "all";
@@ -384,6 +385,61 @@
     radarImg = btn.dataset.img;
     showRadar();
   }));
+
+  // ---------- sun and UV (for the selected station's coordinates) ----------
+  const SUN = { key: "elev", title: "Высота солнца над горизонтом, °", unit: "°", digits: 0, color: "--sun", rows: ["max"],
+                bands: sunBands(), describe: v => sunPhase(v) };
+  const UV = { key: "uv", title: "UV-индекс (CAMS)", unit: "", digits: 1, color: "--uv", zeroBased: true, rows: ["mean", "max"],
+               bands: uvBands(), describe: v => uvLabel(v) };
+  const sunChart = new SeriesChart($("c-sun"), SUN), uvChart = new SeriesChart($("c-uv"), UV);
+  linkCharts([sunChart, uvChart]); // own group: their axis reaches into the forecast
+  const AHEAD = 48 * 3600e3;
+  const hm = ms => new Date(ms).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+
+  // elevation samples over [from, to], at most ~1500 points
+  function sunSeries(st, [from, to], shift = 0) {
+    const step = Math.max(10 * 60e3, (to - from) / 1500), out = { ts: [], elev: [] };
+    for (let t = from; t <= to; t += step) { out.ts.push(t + shift); out.elev.push(Math.round(sunPosition(t, st.lat, st.lon).elevation * 10) / 10); }
+    return out;
+  }
+
+  let uvSeq = 0;
+  async function loadSunUv() {
+    const st = byCode[selected];
+    const b = periods.b();
+    if (!st || b[0] == null) return;
+    const a = periods.a(b), now = Date.now();
+    // when the period ends now, look two days ahead (UV forecast, tomorrow's sun)
+    const ahead = b[1] >= now - 600e3 ? AHEAD : 0;
+    const rb = [b[0], b[1] + ahead], ra = a ? [a[0], a[1] + ahead] : null, offset = a ? b[0] - a[0] : 0;
+    const seq = ++uvSeq;
+    const [uB, uA] = await Promise.all([
+      getJSON(`/api/weather/uv?station=${encodeURIComponent(st.code)}&${q(rb)}`),
+      ra ? getJSON(`/api/weather/uv?station=${encodeURIComponent(st.code)}&${q(ra)}`) : Promise.resolve(null),
+    ]);
+    if (seq !== uvSeq) return;
+    sunChart.set(sunSeries(st, rb), ra ? sunSeries(st, ra, offset) : null, offset, rb);
+    uvChart.show(uB.ts.length > 0);
+    if (uB.ts.length) uvChart.set(toMs(uB), uA ? toMs(uA, offset) : null, offset, rb);
+
+    // tiles: now / today
+    const pos = sunPosition(now, st.lat, st.lon), day = sunTimes(now, st.lat, st.lon);
+    const len = day.rise && day.set ? Math.round((day.set - day.rise) / 60e3) : null;
+    const uvNow = (() => { const i = uB.ts.findIndex(t => t * 1000 > now - 3600e3 && t * 1000 <= now); return i >= 0 ? uB.uv[i] : null; })();
+    const today = new Date(now).toDateString();
+    let uvMax = null, uvMaxAt = null;
+    uB.ts.forEach((t, i) => { if (new Date(t * 1000).toDateString() === today && uB.uv[i] != null && (uvMax == null || uB.uv[i] > uvMax)) { uvMax = uB.uv[i]; uvMaxAt = t * 1000; } });
+    const tile = (label, value, sub) => `<div class="tile"><div class="label">${label}</div><div class="value">${value}</div><div class="note" style="margin:0">${sub}</div></div>`;
+    $("sun-tiles").innerHTML = [
+      tile("Солнце сейчас", `${pos.elevation >= 0 ? "+" : "−"}${num(Math.abs(pos.elevation), 1)}<span class="unit">°</span>`,
+           `${sunPhase(pos.elevation)} · азимут ${Math.round(pos.azimuth)}° (${compass(pos.azimuth)})`),
+      tile("Восход – закат", day.rise && day.set ? `${hm(day.rise)}–${hm(day.set)}` : "–",
+           `${len != null ? `день ${Math.floor(len / 60)} ч ${len % 60} мин · ` : ""}полдень ${hm(day.noon)}, ${num(day.maxElevation, 0)}°`),
+      tile("UV сейчас", uvNow != null ? num(uvNow, 1) : "–", uvNow != null ? uvLabel(uvNow) : "нет данных"),
+      tile("UV максимум сегодня", uvMax != null ? num(uvMax, 1) : "–", uvMax != null ? `${uvLabel(uvMax)} · около ${hm(uvMaxAt)}` : "нет данных"),
+    ].join("");
+    $("sun-h").textContent = `Солнце и UV · ${label(st.code)}`;
+  }
 
   // ---------- daily archive ----------
   const CLIM = [

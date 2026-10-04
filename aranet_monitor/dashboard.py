@@ -4,6 +4,7 @@ GET /weather/home         -> static/index.html (home sensor); "/" redirects here
 GET /weather/outdoor      -> static/weather.html (Cyprus weather stations); "/weather" redirects here
 GET /weather/outdoor/forecast -> static/forecast.html (forecast bulletins, translated)
 GET /api/weather/forecast -> latest bulletins A/B/C with Russian translations
+GET /api/weather/uv?station=CODE&from=T&to=T -> hourly CAMS UV index (incl. forecast hours)
 GET /static/<file>        -> static assets (echarts is vendored, works offline)
 GET /api/readings?hours=N -> readings for the last N hours (no param: everything)
 GET /api/readings?from=T&to=T -> readings in [from, to], unix seconds, either bound optional
@@ -28,7 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import db, dom, forecast, weather
+from . import db, dom, forecast, uv, weather
 from .config import get_settings
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -66,6 +67,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._file(STATIC_DIR / "weather.html")
             elif url.path in ("/weather/outdoor/forecast", "/weather/outdoor/forecast/"):
                 self._file(STATIC_DIR / "forecast.html")
+            elif url.path == "/api/weather/uv":
+                q = parse_qs(url.query)
+                station = q.get("station", [""])[0]
+                if not station:
+                    raise ValueError("station is required")
+                self._json(self._with_weather(uv.readings, station, *self._range(q)))
             elif url.path == "/api/weather/forecast":
                 self._json(self._with_weather(forecast.latest))
             elif url.path == "/api/weather/stations":

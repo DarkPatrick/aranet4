@@ -1,0 +1,10 @@
+[Unit]
+Description=Hourly CAMS UV index refresh (past day + 3 days of forecast)
+
+[Timer]
+OnCalendar=*:25
+OnBootSec=4min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

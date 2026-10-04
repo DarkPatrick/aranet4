@@ -305,6 +305,51 @@ window.UI = (() => {
     return `очень быстро ${dir}`;
   }
 
+  // ---------- sun ----------
+  // Solar position from the standard low-precision ephemeris (as in SunCalc / the
+  // Astronomical Almanac): ~0.1-0.3 degrees, plenty for elevation charts and
+  // sunrise/sunset to the minute.
+  const RAD = Math.PI / 180;
+  function sunPosition(ms, lat, lon) {
+    const d = ms / 864e5 - 0.5 + 2440588 - 2451545;          // days since J2000
+    const M = RAD * (357.5291 + 0.98560028 * d);              // mean anomaly
+    const C = RAD * (1.9148 * Math.sin(M) + 0.02 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M));
+    const L = M + C + RAD * 102.9372 + Math.PI;               // ecliptic longitude
+    const e = RAD * 23.4397;                                  // obliquity
+    const dec = Math.asin(Math.sin(e) * Math.sin(L));
+    const ra = Math.atan2(Math.sin(L) * Math.cos(e), Math.cos(L));
+    const H = RAD * (280.16 + 360.9856235 * d) + RAD * lon - ra; // hour angle
+    const phi = RAD * lat;
+    const elevation = Math.asin(Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(H)) / RAD;
+    const azimuth = (Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(phi) - Math.tan(dec) * Math.cos(phi)) / RAD + 180) % 360;
+    return { elevation, azimuth };
+  }
+  // sunrise / sunset (upper limb with refraction: -0.833 deg), solar noon, for the local day of `ms`
+  function sunTimes(ms, lat, lon) {
+    const day = new Date(ms); day.setHours(0, 0, 0, 0);
+    const step = 60e3, h0 = -0.833;
+    let rise = null, set = null, noon = null, best = -91, prev = sunPosition(day.getTime(), lat, lon).elevation;
+    for (let t = day.getTime() + step; t <= day.getTime() + 864e5; t += step) {
+      const el = sunPosition(t, lat, lon).elevation;
+      if (prev < h0 && el >= h0) rise = t;
+      if (prev >= h0 && el < h0) set = t;
+      if (el > best) { best = el; noon = t; }
+      prev = el;
+    }
+    return { rise, set, noon, maxElevation: best };
+  }
+  // elevation -> phase of the day (standard twilight limits)
+  const SUN_SCALE = [[-18, "ночь"], [-12, "астрономические сумерки"], [-6, "навигационные сумерки"],
+                     [-0.833, "гражданские сумерки"], [6, "низкое солнце"], [Infinity, "день"]];
+  const sunPhase = el => SUN_SCALE.find(([to]) => el < to)[1];
+  const sunBands = () => SUN_SCALE.map(([to, label], i) => ({ from: i ? SUN_SCALE[i - 1][0] : -Infinity, to, label }));
+  const compass = az => ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"][Math.round(az / 45) % 8];
+
+  // UV index, WHO scale
+  const UV_SCALE = [[3, "низкий"], [6, "умеренный"], [8, "высокий"], [11, "очень высокий"], [Infinity, "экстремальный"]];
+  const uvLabel = v => UV_SCALE.find(([to]) => v < to)[1];
+  const uvBands = () => UV_SCALE.map(([to, label], i) => ({ to, label: `${label} (${i ? UV_SCALE[i - 1][0] : 0}${Number.isFinite(to) ? "–" + (to - 1) : "+"})` }));
+
   // ---------- indoor comfort ----------
   // Humidex (Environment Canada): temperature + humidity, no wind -> suits indoors
   const humidex = (t, rh) => t == null || rh == null ? null
@@ -539,6 +584,6 @@ window.UI = (() => {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => charts.forEach(c => c.applyTheme()));
   }
 
-  return { humidex, humidexLabel, humidexBands, pmv, comfort, pmvAt, pmvLabel, pmvBands, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, tendency, zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
+  return { sunPosition, sunTimes, sunPhase, sunBands, compass, uvLabel, uvBands, humidex, humidexLabel, humidexBands, pmv, comfort, pmvAt, pmvLabel, pmvBands, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, tendency, zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
            Periods, toMs, nearest, typicalStep, stats, renderCompareTable, SeriesChart, linkCharts };
 })();

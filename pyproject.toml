@@ -25,6 +25,7 @@ aranet-weather = "aranet_monitor.weather:main"
 aranet-dom = "aranet_monitor.dom:main"
 aranet-forecast = "aranet_monitor.forecast:main"
 aranet-import = "aranet_monitor.importer:main"
+aranet-uv = "aranet_monitor.uv:main"
 
 [tool.setuptools.packages.find]
 include = ["aranet_monitor*"]
