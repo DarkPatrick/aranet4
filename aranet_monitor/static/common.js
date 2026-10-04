@@ -348,6 +348,11 @@ window.UI = (() => {
   const PMV_LABELS = [[-2.5, "холодно"], [-1.5, "прохладно"], [-0.5, "слегка прохладно"], [0.5, "нейтрально"],
                       [1.5, "слегка тепло"], [2.5, "тепло"], [Infinity, "жарко"]];
   const CLOTHING = { light: [0.5, "лёгкая"], medium: [0.7, "средняя"], warm: [1.0, "тёплая"] };
+  const cloFor = (date, choice = "auto") => CLOTHING[choice] ? CLOTHING[choice][0] : clothing(date);
+  // PMV of a reading (seated, still air, walls at air temperature)
+  const pmvAt = (t, rh, date, choice) => t == null || rh == null ? null : pmv(t, t, 0.1, rh, 1.1, cloFor(date, choice)).pmv;
+  const pmvLabel = v => PMV_LABELS.find(([to]) => v < to)[1];
+  const pmvBands = () => PMV_LABELS.map(([to, label], i) => ({ from: i ? PMV_LABELS[i - 1][0] : -Infinity, to, label }));
   // clo: a CLOTHING key, or "auto" (by season)
   function comfort(t, rh, date = new Date(), choice = "auto") {
     if (t == null || rh == null) return null;
@@ -534,6 +539,6 @@ window.UI = (() => {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => charts.forEach(c => c.applyTheme()));
   }
 
-  return { humidex, humidexLabel, humidexBands, pmv, comfort, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, tendency, zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
+  return { humidex, humidexLabel, humidexBands, pmv, comfort, pmvAt, pmvLabel, pmvBands, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, tendency, zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
            Periods, toMs, nearest, typicalStep, stats, renderCompareTable, SeriesChart, linkCharts };
 })();

@@ -1,6 +1,7 @@
 (() => {
   const { css, $, fmtTime, num, signed, toMs, Periods, SeriesChart, linkCharts, renderCompareTable,
-          HPA_TO_MM, pressureLabel, pressureBands, tendency, humidex, humidexLabel, humidexBands, comfort } = UI;
+          HPA_TO_MM, pressureLabel, pressureBands, tendency, humidex, humidexLabel, humidexBands, comfort,
+          pmvAt, pmvLabel, pmvBands } = UI;
   // the sensor reads at the flat's altitude; sea-level equivalent = reading + offset (hPa),
   // estimated by the server from nearby stations
   let pOffset = 0;
@@ -49,6 +50,8 @@
     { key: "temperature", el: "c-temp", title: "Температура, °C", unit: "°C", digits: 1, color: "--temp", rows: ["mean", "min", "max"] },
     { key: "humidex", el: "c-humidex", title: "Humidex", unit: "", digits: 0, color: "--feel", rows: ["mean", "min", "max"],
       bands: humidexBands(), describe: v => humidexLabel(v) },
+    { key: "pmv", el: "c-pmv", title: "Комфорт (PMV)", unit: "", digits: 1, color: "--temp", rows: ["mean", "min", "max"],
+      bands: pmvBands(), describe: v => pmvLabel(v) },
     { key: "humidity", el: "c-hum", title: "Влажность, %", unit: "%", digits: 0, color: "--hum", rows: ["mean", "min", "max"] },
     { key: "pressure_mm", el: "c-pres", title: "Давление, мм рт. ст.", unit: "мм рт. ст.", digits: 1, color: "--pres",
       rows: ["mean", "min", "max"], bands: pressureBands(0, HPA_TO_MM),
@@ -58,7 +61,7 @@
   const charts = METRICS.map(m => new SeriesChart($(m.el), m));
   linkCharts(charts);
 
-  const EMPTY = { ts: [], co2: [], temperature: [], humidity: [], pressure: [], pressure_mm: [], humidex: [] };
+  const EMPTY = { ts: [], co2: [], temperature: [], humidity: [], pressure: [], pressure_mm: [], humidex: [], pmv: [] };
   const fetchRange = async ([from, to]) =>
     (await fetch(`/api/readings?from=${Math.floor(from / 1000)}&to=${Math.ceil(to / 1000)}`, { cache: "no-store" })).json();
 
@@ -74,6 +77,9 @@
     for (const d of [dataB, dataA]) {
       d.pressure_mm = d.pressure.map(v => v == null ? null : v * HPA_TO_MM);
       d.humidex = d.temperature.map((t, i) => { const h = humidex(t, d.humidity[i]); return h == null ? null : Math.round(h * 10) / 10; });
+      // clothing from the tile's selector ("auto": by each point's own season)
+      const choice = $("clothing").value;
+      d.pmv = d.temperature.map((t, i) => { const v = pmvAt(t, d.humidity[i], new Date(d.ts[i] * 1000), choice); return v == null ? null : Math.round(v * 100) / 100; });
     }
     const setB = toMs(dataB), setA = a ? toMs(dataA, offset) : null;
     $("cmp-panel").classList.toggle("hidden", !a);
@@ -118,7 +124,11 @@
   const prefs = UI.store("aranet");
   let lastReading = null;
   $("clothing").value = prefs.get("clothing", "auto");
-  $("clothing").addEventListener("change", () => { prefs.set("clothing", $("clothing").value); renderComfort(); });
+  $("clothing").addEventListener("change", () => {
+    prefs.set("clothing", $("clothing").value);
+    renderComfort();
+    loadCharts().catch(fail); // the comfort chart depends on the clothing too
+  });
   function renderComfort() {
     const r = lastReading, choice = $("clothing").value;
     const c = r && comfort(r.temperature, r.humidity, new Date(r.ts * 1000), choice);
