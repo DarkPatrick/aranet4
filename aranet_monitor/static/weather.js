@@ -1,5 +1,5 @@
 (() => {
-  const { sunPosition, sunTimes, sunPhase, sunBands, compass, uvLabel, uvBands, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, zoomOptions, armZoom, resetZoom, SPARSE, DAY, css, $, store, fmtTime, fmtDay, fmtRange, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
+  const { sunPosition, sunTimes, sunPhase, sunBands, sunLegend, compass, uvLabel, uvBands, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, zoomOptions, armZoom, resetZoom, SPARSE, DAY, css, $, store, fmtTime, fmtDay, fmtRange, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
   const REFRESH_MS = 5 * 60 * 1000;
   const STALE_S = 3600;
   const prefs = store("weather");
@@ -388,10 +388,15 @@
 
   // ---------- sun and UV (for the selected station's coordinates) ----------
   const SUN = { key: "elev", title: "Высота солнца над горизонтом, °", unit: "°", digits: 0, color: "--sun", rows: ["max"],
-                bands: sunBands(), describe: v => sunPhase(v) };
+                bands: sunBands(), describe: v => sunPhase(v), limits: [-90, 90] };
   const UV = { key: "uv", title: "UV-индекс (CAMS)", unit: "", digits: 1, color: "--uv", zeroBased: true, rows: ["mean", "max"],
                bands: uvBands(), describe: v => uvLabel(v) };
   const sunChart = new SeriesChart($("c-sun"), SUN), uvChart = new SeriesChart($("c-uv"), UV);
+  // thin twilight bands can't carry a name inside the chart: list them under it
+  const drawSunLegend = () => { $("sun-legend").innerHTML = sunLegend().map(([c, name, range]) =>
+    `<span><span class="sw" style="background:${c}"></span>${name}: ${range}</span>`).join(""); };
+  drawSunLegend();
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { SUN.bands = sunBands(); drawSunLegend(); });
   linkCharts([sunChart, uvChart]); // own group: their axis reaches into the forecast
   const AHEAD = 48 * 3600e3;
   const hm = ms => new Date(ms).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });

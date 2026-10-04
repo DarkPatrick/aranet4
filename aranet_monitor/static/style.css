@@ -2,14 +2,18 @@
     --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --muted: #6b7280; --border: #e5e7eb;
     --grid: #eef0f3; --good: #2e9e5b; --warn: #d9a400; --bad: #d64545; --cmp: #8b93a1;
     --temp: #e0752d; --hum: #2f7fd1; --pres: #7a5cc7; --co2: #2e9e5b; --head: #f1f3f6;
-    --rain: #1f8fb3; --wind: #4f8a5b; --rad: #c98a12; --home: #b0459b; --feel: #c2416b; --sea: #1b7f9e; --uv: #7b4fc9; --sun: #d08a00; --band: rgba(29, 35, 48, .06);
+    --rain: #1f8fb3; --wind: #4f8a5b; --rad: #c98a12; --home: #b0459b; --feel: #c2416b; --sea: #1b7f9e; --uv: #7b4fc9; --sun: #d08a00;
+    --sky-day: rgba(255, 196, 0, .10); --sky-low: rgba(255, 140, 40, .20); --sky-civil: rgba(110, 150, 220, .22);
+    --sky-nautical: rgba(70, 95, 180, .28); --sky-astro: rgba(45, 55, 140, .34); --sky-night: rgba(25, 30, 80, .40); --band: rgba(29, 35, 48, .06);
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #12151b; --card: #1b1f27; --text: #e6e8ec; --muted: #9aa1ad; --border: #2a303b;
       --grid: #262b35; --good: #43b874; --warn: #e3b42b; --bad: #ec6060; --cmp: #7d8594;
       --temp: #f08a45; --hum: #5a9ee6; --pres: #9b80e0; --co2: #43b874; --head: #222733;
-      --rain: #3fb0d4; --wind: #6fb07c; --rad: #e0a72e; --home: #d36bbf; --feel: #e57396; --sea: #45b3d6; --uv: #a688e6; --sun: #f0b429; --band: rgba(230, 232, 236, .07);
+      --rain: #3fb0d4; --wind: #6fb07c; --rad: #e0a72e; --home: #d36bbf; --feel: #e57396; --sea: #45b3d6; --uv: #a688e6; --sun: #f0b429;
+      --sky-day: rgba(255, 196, 0, .10); --sky-low: rgba(255, 140, 40, .18); --sky-civil: rgba(110, 150, 220, .20);
+      --sky-nautical: rgba(90, 115, 200, .22); --sky-astro: rgba(70, 80, 170, .26); --sky-night: rgba(10, 12, 40, .55); --band: rgba(230, 232, 236, .07);
     }
   }
   * { box-sizing: border-box; }
@@ -110,3 +114,5 @@ nav.tabs .tab.active { background: var(--card); color: var(--text); font-weight:
 @media (max-width: 480px) { nav.tabs .tab { padding: 6px 10px; } }
 label.mini { font-size: 12px; margin-top: 4px; gap: 2px 4px; max-width: 100%; display: flex; flex-wrap: wrap; }
 label.mini select { padding: 1px 4px; font-size: 12px; max-width: 100%; min-width: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin: -6px 0 12px 4px; }
+.legend span.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 5px; border: 1px solid var(--border); }

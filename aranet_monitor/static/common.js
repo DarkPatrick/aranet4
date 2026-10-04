@@ -342,7 +342,14 @@ window.UI = (() => {
   const SUN_SCALE = [[-18, "ночь"], [-12, "астрономические сумерки"], [-6, "навигационные сумерки"],
                      [-0.833, "гражданские сумерки"], [6, "низкое солнце"], [Infinity, "день"]];
   const sunPhase = el => SUN_SCALE.find(([to]) => el < to)[1];
-  const sunBands = () => SUN_SCALE.map(([to, label], i) => ({ from: i ? SUN_SCALE[i - 1][0] : -Infinity, to, label }));
+  const SUN_COLORS = ["--sky-night", "--sky-astro", "--sky-nautical", "--sky-civil", "--sky-low", "--sky-day"];
+  const sunBands = () => SUN_SCALE.map(([to, label], i) => ({ from: i ? SUN_SCALE[i - 1][0] : -Infinity, to, label, color: css(SUN_COLORS[i]) }));
+  // legend rows: [colour, name, range in degrees]
+  const sunLegend = () => SUN_SCALE.map(([to, label], i) => {
+    const from = i ? SUN_SCALE[i - 1][0] : null, f = v => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toString().replace(".", ",") + "°";
+    const range = from == null ? `ниже ${f(to)}` : Number.isFinite(to) ? `${f(to)} … ${f(from)}` : `выше ${f(from)}`;
+    return [css(SUN_COLORS[i]), label, range];
+  }).reverse();
   const compass = az => ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"][Math.round(az / 45) % 8];
 
   // UV index, WHO scale
@@ -427,9 +434,9 @@ window.UI = (() => {
   function bandLayers(spans, range, seriesB) {
     seriesB.markArea = {
       silent: true, label: { show: false },
-      data: spans.map(({ from, to, i }) => [{ yAxis: from, itemStyle: { color: i % 2 ? css("--band") : "transparent" } }, { yAxis: to }]),
+      data: spans.map(({ from, to, i, color }) => [{ yAxis: from, itemStyle: { color: color || (i % 2 ? css("--band") : "transparent") } }, { yAxis: to }]),
     };
-    return spans.filter(({ from, to }) => (to - from) / (range[1] - range[0]) >= 0.08);
+    return spans; // which ones get a name is decided in pixels, see placeBandNames
   }
 
   function bandsOption(bands, sets, key, seriesB) {
@@ -440,7 +447,7 @@ window.UI = (() => {
     n = n < 0 ? bands.length - 1 : n;
     n = Math.max(n, 2); // always show a few bands for scale
     const top = Number.isFinite(bands[n].to) ? bands[n].to : hi * 1.1;
-    const spans = bands.slice(0, n + 1).map((b, i) => ({ from: i ? bands[i - 1].to : 0, to: Math.min(b.to, top), label: b.label, i }));
+    const spans = bands.slice(0, n + 1).map((b, i) => ({ from: i ? bands[i - 1].to : 0, to: Math.min(b.to, top), label: b.label, color: b.color, i }));
     return { yAxis: { min: 0, max: top }, labels: bandLayers(spans, [0, top], seriesB) };
   }
 
@@ -449,9 +456,12 @@ window.UI = (() => {
   function rangeBands(bands, vals, seriesB) {
     if (!vals.length) return {};
     const lo = Math.min(...vals), hi = Math.max(...vals), pad = Math.max(1, (hi - lo) * 0.15);
-    const view = [Math.floor(lo - pad), Math.ceil(hi + pad)];
+    // axis ends on round values (1, 2, 5 x 10^n), e.g. -90 rather than -77
+    const raw = (hi - lo + 2 * pad) / 6, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 5, 10].map(k => k * mag).find(v => v >= raw);
+    const view = [Math.floor((lo - pad) / step) * step, Math.ceil((hi + pad) / step) * step];
     const spans = bands.map((b, i) => ({ ...b, i })).filter(b => b.to > view[0] && b.from < view[1])
-      .map(b => ({ from: Math.max(b.from, view[0]), to: Math.min(b.to, view[1]), label: b.label, i: b.i }));
+      .map(b => ({ from: Math.max(b.from, view[0]), to: Math.min(b.to, view[1]), label: b.label, color: b.color, i: b.i }));
     return { yAxis: { min: view[0], max: view[1] }, labels: bandLayers(spans, view, seriesB) };
   }
 
@@ -555,6 +565,11 @@ window.UI = (() => {
         const { labels, ...rest } = bandsOption(this.m.bands, this.sets, this.m.key, upd.series[0]);
         Object.assign(upd, rest);
         this.bandNames = labels || null;
+        // physical limits of the quantity (sun elevation: ±90°) beat the rounded axis
+        if (this.m.limits && upd.yAxis) {
+          upd.yAxis.min = Math.max(upd.yAxis.min, this.m.limits[0]);
+          upd.yAxis.max = Math.min(upd.yAxis.max, this.m.limits[1]);
+        }
       }
       this.chart.setOption(upd);
       this.placeBandNames();
@@ -566,8 +581,10 @@ window.UI = (() => {
       const names = this.bandNames || [];
       // x from the grid itself: the time axis may be zoomed, the left edge stays put
       const rect = this.chart.getModel().getComponent("grid").coordinateSystem.getRect();
-      const elements = names.map(({ to, label }) => {
-        const y = this.chart.convertToPixel({ yAxisIndex: 0 }, to);
+      const px = v => this.chart.convertToPixel({ yAxisIndex: 0 }, v);
+      // a name needs ~16 px of band height to fit
+      const elements = names.filter(({ from, to }) => Math.abs(px(from) - px(to)) >= 16).map(({ to, label }) => {
+        const y = px(to);
         return { type: "text", silent: true, z: 100, left: rect.x + 6, top: Math.max(rect.y, y) + 3,
                  style: { text: label, fill: css("--muted"), font: "10px sans-serif",
                           backgroundColor: css("--card"), padding: [1, 4], borderRadius: 3 } };
@@ -584,6 +601,6 @@ window.UI = (() => {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => charts.forEach(c => c.applyTheme()));
   }
 
-  return { sunPosition, sunTimes, sunPhase, sunBands, compass, uvLabel, uvBands, humidex, humidexLabel, humidexBands, pmv, comfort, pmvAt, pmvLabel, pmvBands, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, tendency, zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
+  return { sunPosition, sunTimes, sunPhase, sunBands, sunLegend, compass, uvLabel, uvBands, humidex, humidexLabel, humidexBands, pmv, comfort, pmvAt, pmvLabel, pmvBands, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, tendency, zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
            Periods, toMs, nearest, typicalStep, stats, renderCompareTable, SeriesChart, linkCharts };
 })();
