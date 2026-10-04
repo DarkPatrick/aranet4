@@ -1,6 +1,6 @@
 (() => {
   const { css, $, fmtTime, num, signed, toMs, Periods, SeriesChart, linkCharts, renderCompareTable,
-          HPA_TO_MM, pressureLabel, pressureBands, tendency } = UI;
+          HPA_TO_MM, pressureLabel, pressureBands, tendency, humidex, humidexLabel, humidexBands, comfort } = UI;
   // the sensor reads at the flat's altitude; sea-level equivalent = reading + offset (hPa),
   // estimated by the server from nearby stations
   let pOffset = 0;
@@ -47,6 +47,8 @@
              { label: `доля времени > ${CO2_WARN} ppm`, get: s => s.above(CO2_WARN), pp: true },
              { label: `доля времени > ${CO2_BAD} ppm`, get: s => s.above(CO2_BAD), pp: true }] },
     { key: "temperature", el: "c-temp", title: "Температура, °C", unit: "°C", digits: 1, color: "--temp", rows: ["mean", "min", "max"] },
+    { key: "humidex", el: "c-humidex", title: "Humidex", unit: "", digits: 0, color: "--feel", rows: ["mean", "min", "max"],
+      bands: humidexBands(), describe: v => humidexLabel(v) },
     { key: "humidity", el: "c-hum", title: "Влажность, %", unit: "%", digits: 0, color: "--hum", rows: ["mean", "min", "max"] },
     { key: "pressure_mm", el: "c-pres", title: "Давление, мм рт. ст.", unit: "мм рт. ст.", digits: 1, color: "--pres",
       rows: ["mean", "min", "max"], bands: pressureBands(0, HPA_TO_MM),
@@ -56,7 +58,7 @@
   const charts = METRICS.map(m => new SeriesChart($(m.el), m));
   linkCharts(charts);
 
-  const EMPTY = { ts: [], co2: [], temperature: [], humidity: [], pressure: [], pressure_mm: [] };
+  const EMPTY = { ts: [], co2: [], temperature: [], humidity: [], pressure: [], pressure_mm: [], humidex: [] };
   const fetchRange = async ([from, to]) =>
     (await fetch(`/api/readings?from=${Math.floor(from / 1000)}&to=${Math.ceil(to / 1000)}`, { cache: "no-store" })).json();
 
@@ -69,7 +71,10 @@
     const [dataB, dataA] = await Promise.all([fetchRange(b), a ? fetchRange(a) : Promise.resolve(EMPTY)]);
     if (seq !== loadSeq) return; // a newer selection is already loading
     const offset = a ? b[0] - a[0] : 0;
-    for (const d of [dataB, dataA]) d.pressure_mm = d.pressure.map(v => v == null ? null : v * HPA_TO_MM);
+    for (const d of [dataB, dataA]) {
+      d.pressure_mm = d.pressure.map(v => v == null ? null : v * HPA_TO_MM);
+      d.humidex = d.temperature.map((t, i) => { const h = humidex(t, d.humidity[i]); return h == null ? null : Math.round(h * 10) / 10; });
+    }
     const setB = toMs(dataB), setA = a ? toMs(dataA, offset) : null;
     $("cmp-panel").classList.toggle("hidden", !a);
     if (a) renderCompareTable($("cmp-table"), METRICS, dataB, dataA);
@@ -85,6 +90,11 @@
     }
     $("v-co2").textContent = reading.co2 ?? "–";
     $("v-temp").textContent = reading.temperature != null ? reading.temperature.toFixed(1) : "–";
+    const c = comfort(reading.temperature, reading.humidity, new Date(reading.ts * 1000));
+    $("v-comfort").textContent = c ? `PMV ${signed(c.pmv, 1)} · ${c.label} (${Math.round(c.ppd)} % недовольных)` : "";
+    const h = humidex(reading.temperature, reading.humidity);
+    $("v-humidex").textContent = h == null ? "–" : Math.round(h);
+    $("v-humidex-sub").textContent = h == null ? "" : humidexLabel(h);
     $("v-hum").textContent = reading.humidity != null ? Math.round(reading.humidity) : "–";
     $("v-pres").textContent = reading.pressure != null ? Math.round(reading.pressure * HPA_TO_MM) : "–";
     if (reading.pressure != null) {
@@ -96,8 +106,8 @@
       $("v-pres-sub").textContent = `${num(reading.pressure, 1)} гПа · ${pressureLabel(reading.pressure + pOffset)}${trend}`;
     }
     $("v-bat").textContent = status && status.battery != null ? status.battery : "–";
-    const c = reading.co2;
-    $("tile-co2").style.borderLeftColor = c == null ? css("--border") : c < CO2_WARN ? css("--good") : c < CO2_BAD ? css("--warn") : css("--bad");
+    const co2 = reading.co2;
+    $("tile-co2").style.borderLeftColor = co2 == null ? css("--border") : co2 < CO2_WARN ? css("--good") : co2 < CO2_BAD ? css("--warn") : css("--bad");
     const ageMin = Math.round((Date.now() / 1000 - reading.ts) / 60);
     const stale = ageMin > 30 ? " ⚠ данные устарели" : "";
     const device = status && status.name ? `${status.name} · ` : "";

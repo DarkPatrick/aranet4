@@ -305,6 +305,51 @@ window.UI = (() => {
     return `очень быстро ${dir}`;
   }
 
+  // ---------- indoor comfort ----------
+  // Humidex (Environment Canada): temperature + humidity, no wind -> suits indoors
+  const humidex = (t, rh) => t == null || rh == null ? null
+    : t + 0.5555 * (6.112 * Math.pow(10, 7.5 * t / (237.7 + t)) * rh / 100 - 10);
+  // [upper bound, short label for the chart margin, full description]
+  const HUMIDEX_SCALE = [[20, "ниже шкалы", "ниже 20, шкала не применяется"], [30, "комфортно", "без дискомфорта"],
+                         [40, "заметный", "заметный дискомфорт"], [46, "сильный", "сильный дискомфорт"],
+                         [54, "опасно", "опасно"], [Infinity, "тепл. удар", "угроза теплового удара"]];
+  const humidexLabel = h => HUMIDEX_SCALE.find(([to]) => h < to)[2];
+  const humidexBands = () => HUMIDEX_SCALE.map(([to, label], i) => ({ from: i ? HUMIDEX_SCALE[i - 1][0] : -Infinity, to, label }));
+
+  // PMV / PPD (ISO 7730, Fanger), port of the standard's reference code; checked against
+  // the standard's worked examples and pythermalcomfort
+  function pmv(ta, tr, vel, rh, met, clo) {
+    const pa = rh * 10 * Math.exp(16.6536 - 4030.183 / (ta + 235));
+    const icl = 0.155 * clo, m = met * 58.15, mw = m;
+    const fcl = icl <= 0.078 ? 1 + 1.29 * icl : 1.05 + 0.645 * icl;
+    const hcf = 12.1 * Math.sqrt(vel), taa = ta + 273, tra = tr + 273;
+    const tcla = taa + (35.5 - ta) / (3.5 * icl + 0.1);
+    const p1 = icl * fcl, p2 = p1 * 3.96, p3 = p1 * 100, p4 = p1 * taa;
+    const p5 = 308.7 - 0.028 * mw + p2 * Math.pow(tra / 100, 4);
+    let xn = tcla / 100, xf = tcla / 50, hc = hcf, n = 0;
+    while (Math.abs(xn - xf) > 0.00015 && n++ < 150) {
+      xf = (xf + xn) / 2;
+      hc = Math.max(hcf, 2.38 * Math.pow(Math.abs(100 * xf - taa), 0.25));
+      xn = (p5 + p4 * hc - p2 * Math.pow(xf, 4)) / (100 + p3 * hc);
+    }
+    const tcl = 100 * xn - 273;
+    const hl1 = 3.05e-3 * (5733 - 6.99 * mw - pa), hl2 = mw > 58.15 ? 0.42 * (mw - 58.15) : 0;
+    const hl3 = 1.7e-5 * m * (5867 - pa), hl4 = 0.0014 * m * (34 - ta);
+    const hl5 = 3.96 * fcl * (Math.pow(xn, 4) - Math.pow(tra / 100, 4)), hl6 = fcl * hc * (tcl - ta);
+    const v = (0.303 * Math.exp(-0.036 * m) + 0.028) * (mw - hl1 - hl2 - hl3 - hl4 - hl5 - hl6);
+    return { pmv: v, ppd: 100 - 95 * Math.exp(-0.03353 * v ** 4 - 0.2179 * v ** 2) };
+  }
+  // assumptions for a flat in Cyprus: seated (1.1 met), still air, walls at air temperature,
+  // clothing by season (clo): light summer clothes, trousers + sweater in winter
+  const clothing = date => { const m = date.getMonth() + 1; return m >= 5 && m <= 9 ? 0.5 : m === 4 || m === 10 ? 0.7 : 1.0; };
+  const PMV_LABELS = [[-2.5, "холодно"], [-1.5, "прохладно"], [-0.5, "слегка прохладно"], [0.5, "нейтрально"],
+                      [1.5, "слегка тепло"], [2.5, "тепло"], [Infinity, "жарко"]];
+  function comfort(t, rh, date = new Date()) {
+    if (t == null || rh == null) return null;
+    const clo = clothing(date), r = pmv(t, t, 0.1, rh, 1.1, clo);
+    return { ...r, clo, label: PMV_LABELS.find(([to]) => r.pmv < to)[1] };
+  }
+
   // Shaded horizontal reference bands with names, from 0 up to the band holding the
   // highest value in view (so a calm week isn't drawn on a 0-33 m/s axis).
   // bands: [{to: upper bound, label}], ascending; the last `to` may be Infinity.
@@ -453,6 +498,6 @@ window.UI = (() => {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => charts.forEach(c => c.applyTheme()));
   }
 
-  return { breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, tendency, zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
+  return { humidex, humidexLabel, humidexBands, pmv, comfort, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, tendency, zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
            Periods, toMs, nearest, typicalStep, stats, renderCompareTable, SeriesChart, linkCharts };
 })();
