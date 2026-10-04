@@ -55,10 +55,6 @@
            height: 260px; margin-bottom: 12px; }
   .chart.big { height: 320px; }
 
-  nav { display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; }
-  nav a { color: var(--muted); text-decoration: none; font-size: 15px; }
-  nav a.here { color: var(--text); font-weight: 600; font-size: 20px; }
-  nav a:hover { color: var(--text); }
 
 /* weather page */
 #map { height: clamp(240px, 58vw, 460px); border-radius: 10px; border: 1px solid var(--border); margin: 12px 0; z-index: 0; }
@@ -100,10 +96,15 @@ table.coast td:nth-child(n) { min-width: 70px; }
   .alert.lvl4 { background: #3d1515; border-color: #d04545; color: #f5b3b3; }
 }
 
-/* "Прогноз" button, top right */
-nav .nav-btn { margin-left: auto; align-self: center; font-size: 14px; font-weight: 600; color: var(--text);
-               border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 5px 14px; }
-nav .nav-btn:hover { border-color: var(--text); }
-nav a.nav-btn.here { font-size: 14px; background: var(--text); color: var(--card); border-color: var(--text); }
 p.synopsis { font-weight: 600; }
 .tile .value { white-space: nowrap; }
+
+/* page tabs */
+nav.tabs { display: inline-flex; gap: 2px; padding: 3px; background: var(--grid); border: 1px solid var(--border);
+           border-radius: 10px; max-width: 100%; overflow-x: auto; margin-bottom: 6px; }
+nav.tabs .tab { padding: 6px 14px; border-radius: 8px; color: var(--muted); text-decoration: none; white-space: nowrap;
+                font-size: 14px; font-weight: 500; }
+nav.tabs a.tab:hover { color: var(--text); background: var(--card); }
+nav.tabs .tab.active { background: var(--card); color: var(--text); font-weight: 600; cursor: default;
+                       box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+@media (max-width: 480px) { nav.tabs .tab { padding: 6px 10px; } }
