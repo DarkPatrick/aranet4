@@ -1,0 +1,10 @@
+[Unit]
+Description=Hourly air quality refresh (DLI measurements, CAMS model + 4 days of forecast)
+
+[Timer]
+OnCalendar=*:15
+OnBootSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

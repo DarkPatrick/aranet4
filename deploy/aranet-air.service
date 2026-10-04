@@ -1,0 +1,12 @@
+[Unit]
+Description=Air quality: DLI measurements + CAMS model per station (one run)
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__DIR__
+EnvironmentFile=__DIR__/config.env
+ExecStart=__DIR__/.venv/bin/aranet-air
+TimeoutStartSec=300

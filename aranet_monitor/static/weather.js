@@ -228,6 +228,7 @@
     renderHome(b);
     renderSst();
     loadSunUv().catch(fail);
+    loadAir().catch(fail);
   }
 
   const fitAll = () => periods.s.quick === "all";
@@ -450,6 +451,80 @@
       tile("UV максимум сегодня", uvMax != null ? num(uvMax, 1) : "–", uvMax != null ? `${uvLabel(uvMax)} · около ${hm(uvMaxAt)}${altNote(uvMaxAlt)}` : "нет данных"),
     ].join("");
     $("sun-h").textContent = `Солнце и UV · ${label(st.code)}`;
+  }
+
+  // ---------- air quality: nearest DLI measurements + CAMS at the station ----------
+  // the DLI network's hourly scale (µg/m³): low / moderate / high / very high
+  const AIR_LEVELS = ["низкий", "умеренный", "высокий", "очень высокий"];
+  const AIR_SCALE = { pm25: [25, 50, 100], pm10: [50, 100, 200], no2: [100, 150, 200], o3: [100, 140, 180] };
+  const airLevel = (p, v) => { const i = AIR_SCALE[p].findIndex(to => v < to); return AIR_LEVELS[i < 0 ? 3 : i]; };
+  const airBands = p => [...AIR_SCALE[p], Infinity].map((to, i, a) =>
+    ({ to, label: `${AIR_LEVELS[i]} (${Number.isFinite(to) ? `${i ? a[i - 1] : 0}–${to}` : `> ${a[i - 1]}`})` }));
+  const EAQI = [[20, "хороший"], [40, "удовлетворительный"], [60, "умеренный"], [80, "плохой"], [100, "очень плохой"], [Infinity, "крайне плохой"]];
+  const eaqiLabel = v => EAQI.find(([to]) => v < to)[1];
+  const AIR = [
+    { p: "pm25", el: "c-pm25", name: "PM2.5", color: "--pm25" },
+    { p: "pm10", el: "c-pm10", name: "PM10", color: "--pm10" },
+    { p: "dust", el: "c-dust", name: "Пыль (модель CAMS)", color: "--dust" },
+    { p: "no2", el: "c-no2", name: "NO₂", color: "--no2" },
+    { p: "o3", el: "c-o3", name: "O₃ (озон)", color: "--o3" },
+  ].map(a => Object.assign(a, { key: a.p, title: a.name, unit: "мкг/м³", digits: 1, zeroBased: true, rows: ["mean", "max"],
+    nowLine: true, fitData: true, bands: AIR_SCALE[a.p] ? airBands(a.p) : null, describe: AIR_SCALE[a.p] ? v => airLevel(a.p, v) : null }));
+  // dust is whole µg/m³ and ~0-2 on a clean day: keep the axis at 10+ so that noise doesn't look like an event
+  AIR.find(m => m.p === "dust").axis = sets => {
+    const hi = Math.max(0, ...[sets.b, sets.a].filter(Boolean).flatMap(s => s.dust_cams).filter(v => v != null));
+    return { min: 0, max: hi < 10 ? 10 : null };
+  };
+  const airCharts = AIR.map(m => new SeriesChart($(m.el), m));
+  linkCharts(airCharts);
+
+  let airSeq = 0;
+  async function loadAir() {
+    const st = byCode[selected];
+    const b = periods.b();
+    if (!st || b[0] == null) return;
+    const a = periods.a(b), now = Date.now();
+    const ahead = b[1] >= now - 600e3 ? AHEAD : 0;
+    const rb = [b[0], b[1] + ahead], ra = a ? [a[0], a[1] + ahead] : null, offset = a ? b[0] - a[0] : 0;
+    const seq = ++airSeq;
+    const url = r => `/api/weather/air?station=${encodeURIComponent(st.code)}&${q(r)}`;
+    const [dB, dA] = await Promise.all([getJSON(url(rb)), ra ? getJSON(url(ra)) : Promise.resolve(null)]);
+    if (seq !== airSeq) return;
+    const measured = p => !!dB.sources[p] && dB[p].some(v => v != null);
+    const where = s => `${s.name}, ${s.kind}, ${num(s.km, 0)} км`;
+    AIR.forEach((m, i) => {
+      const meas = measured(m.p), key = meas ? m.p : m.p + "_cams";
+      m.key = key;
+      m.extra = meas ? { key: m.p + "_cams", label: "модель CAMS", dash: "dotted" } : null;
+      m.title = meas ? `${m.name}, мкг/м³ · ${where(dB.sources[m.p])} · точками — модель CAMS`
+                     : m.p === "dust" ? `${m.name}, мкг/м³` : `${m.name}, мкг/м³ · модель CAMS (рядом не меряют)`;
+      const has = dB[key].some(v => v != null);
+      airCharts[i].show(has);
+      if (has) { airCharts[i].applyTheme(); airCharts[i].set(toMs(dB), dA ? toMs(dA, offset) : null, offset, rb); }
+    });
+
+    // tiles: the latest measurement (≤ 3 h old), else the model's current hour
+    const iNow = dB.ts.findIndex(t => t * 1000 > now - 3600e3 && t * 1000 <= now);
+    const cams = k => iNow >= 0 ? dB[k + "_cams"][iNow] : null;
+    const latest = p => {
+      for (let i = dB.ts.length - 1; i >= 0; i--) {
+        if (dB.ts[i] * 1000 > now) continue;
+        if (dB.ts[i] * 1000 < now - 3 * 3600e3) break;
+        if (dB[p][i] != null) return { v: dB[p][i], at: dB.ts[i] * 1000 };
+      }
+      return null;
+    };
+    const tile = (lbl, value, sub) => `<div class="tile"><div class="label">${lbl}</div><div class="value">${value}<span class="unit">${value === "–" ? "" : "мкг/м³"}</span></div><div class="note" style="margin:0">${sub}</div></div>`;
+    const tiles = ["pm25", "pm10", "no2", "o3"].map(p => {
+      const name = AIR.find(m => m.p === p).name, x = latest(p), c = cams(p);
+      if (x) return tile(name, num(x.v, 1), `${airLevel(p, x.v)} · ${dB.sources[p].name}, ${hm(x.at)}${c != null ? ` · модель ${num(c, 1)}` : ""}`);
+      return tile(name, c != null ? num(c, 1) : "–", c != null ? `${airLevel(p, c)} · модель CAMS` : "нет данных");
+    });
+    const dust = cams("dust"), aqi = cams("eaqi");
+    tiles.push(tile("Пыль", dust != null ? num(dust, 1) : "–", dust != null ? "сахарская, модель CAMS" : "нет данных"));
+    tiles.push(`<div class="tile"><div class="label">Индекс EAQI</div><div class="value">${aqi != null ? Math.round(aqi) : "–"}</div><div class="note" style="margin:0">${aqi != null ? `${eaqiLabel(aqi)} · модель CAMS` : "нет данных"}</div></div>`);
+    $("air-tiles").innerHTML = tiles.join("");
+    $("air-h").textContent = `Качество воздуха · ${label(st.code)}`;
   }
 
   // ---------- daily archive ----------

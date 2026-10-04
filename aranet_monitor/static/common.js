@@ -439,14 +439,20 @@ window.UI = (() => {
     return spans; // which ones get a name is decided in pixels, see placeBandNames
   }
 
-  function bandsOption(bands, sets, key, seriesB) {
+  // fitData: the axis ends just above the data (a round value), not at a band edge;
+  // for quantities that usually sit deep inside the lowest band (air pollutants)
+  function bandsOption(bands, sets, key, seriesB, fitData = false) {
     const vals = [sets.b, sets.a].filter(Boolean).flatMap(s => s[key]).filter(v => v != null);
     if (bands[0].from !== undefined) return rangeBands(bands, vals, seriesB);
     const hi = vals.length ? Math.max(...vals) : 0;
     let n = bands.findIndex(b => hi < b.to);
     n = n < 0 ? bands.length - 1 : n;
-    n = Math.max(n, 2); // always show a few bands for scale
-    const top = Number.isFinite(bands[n].to) ? bands[n].to : hi * 1.1;
+    if (!fitData) n = Math.max(n, 2); // always show a few bands for scale
+    let top = Number.isFinite(bands[n].to) ? bands[n].to : hi * 1.1;
+    if (fitData && hi > 0) {
+      const mag = Math.pow(10, Math.floor(Math.log10(hi * 1.15))) / 2;
+      top = Math.min(top, Math.ceil(hi * 1.15 / mag) * mag);
+    }
     const spans = bands.slice(0, n + 1).map((b, i) => ({ from: i ? bands[i - 1].to : 0, to: Math.min(b.to, top), label: b.label, color: b.color, i }));
     return { yAxis: { min: 0, max: top }, labels: bandLayers(spans, [0, top], seriesB) };
   }
@@ -574,7 +580,7 @@ window.UI = (() => {
       }
       if (this.m.bands) {
         const bandSets = ex && this.sets.b ? { b: { [this.m.key]: this.sets.b[this.m.key].concat(this.sets.b[ex.key]) }, a: this.sets.a } : this.sets;
-        const { labels, ...rest } = bandsOption(this.m.bands, bandSets, this.m.key, upd.series[0]);
+        const { labels, ...rest } = bandsOption(this.m.bands, bandSets, this.m.key, upd.series[0], this.m.fitData);
         Object.assign(upd, rest);
         this.bandNames = labels || null;
         // physical limits of the quantity (sun elevation: ±90°) beat the rounded axis
