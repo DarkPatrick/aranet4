@@ -14,7 +14,7 @@ The dashboard shows, for the selected weather station, the model at its coordina
 and, per pollutant, the nearest network station that measures it.
 
     aranet-air                     # timer: hourly
-    aranet-air --since 2026-01-01  # backfill the measurements
+    aranet-air --since 2016-01-01  # backfill the measurements (resumable, 10 s per request)
 """
 
 import argparse
@@ -39,6 +39,7 @@ API = "https://air-quality-api.open-meteo.com/v1/air-quality"
 UA = {"User-Agent": "aranet-monitor/0.1 (+https://github.com/DarkPatrick/aranet4)"}
 CHUNK = 30  # weather stations per Open-Meteo request
 DLI_CHUNK_DAYS = 60  # one station_data request covers at most this many days
+CRAWL_DELAY = 10  # s between requests to the DLI site, as its robots.txt asks
 
 # (DLI id, code, name, kind, lat, lon). Coordinates from the site's JSON:API
 # (/jsonapi/node/station); the two EAC stations have none there, so those are the
@@ -136,17 +137,60 @@ def store_obs(conn, rows: list[dict]) -> int:
     return len(rows)
 
 
-def collect_obs(conn, since: datetime | None = None, default_days: int = 30) -> int:
-    """Per station: from `since`, else from a few hours before its last value (values get
-    revised), else `default_days` back; in chunks, up to the next hour."""
+class Blocked(Exception):
+    """The site refused us (403/429): stop instead of hammering it."""
+
+
+def _fetch_politely(sid, code, start, end, retries=(60, 300)) -> list[dict] | None:
+    """fetch_dli with backoff; None after the last retry fails (the caller skips that chunk)."""
+    for attempt in range(len(retries) + 1):
+        try:
+            return fetch_dli(sid, code, start, end)
+        except urllib.error.HTTPError as exc:
+            if exc.code in (403, 429):
+                raise Blocked(f"{code}: HTTP {exc.code}") from exc
+            err = exc
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+            err = exc
+        if attempt < len(retries):
+            log.warning("%s %s..%s: %s, retrying in %d s", code, start, end, err, retries[attempt])
+            time.sleep(retries[attempt])
+    log.warning("%s %s..%s: giving up on this chunk (%s)", code, start, end, err)
+    return None
+
+
+def backfill_obs(conn, since: datetime, pause: float = CRAWL_DELAY, chunk_days: int = 90) -> int:
+    """History back to `since`, newest chunk first, from each station's earliest stored value
+    (so an interrupted run resumes). One request every `pause` s (the site's robots.txt asks
+    for Crawl-delay: 10). A station with a whole year of nothing hadn't started yet."""
+    n = 0
+    for sid, code, *_ in STATIONS:
+        first = conn.execute("SELECT MIN(ts) FROM air_obs WHERE station = ?", (code,)).fetchone()[0]
+        end = (datetime.fromtimestamp(first, weather.LOCAL_TZ).replace(tzinfo=None) if first
+               else datetime.now(weather.LOCAL_TZ).replace(tzinfo=None) + timedelta(hours=1))
+        empty, got = 0, 0
+        while end > since and empty * chunk_days < 365:
+            start = max(since, end - timedelta(days=chunk_days))
+            rows = _fetch_politely(sid, code, start, end)
+            if rows is not None:
+                got += store_obs(conn, rows)
+                empty = 0 if rows else empty + 1
+            end = start
+            time.sleep(pause)
+        n += got
+        log.info("%s: %d hours, back to %s", code, got, end.date() if empty * chunk_days < 365 else f"{end.date()} (nothing earlier)")
+    return n
+
+
+def collect_obs(conn, default_days: int = 30, pause: float = CRAWL_DELAY) -> int:
+    """Per station: from a few hours before its last value (values get revised), else
+    `default_days` back; in chunks, up to the next hour, `pause` s between requests."""
     now = datetime.now(weather.LOCAL_TZ).replace(tzinfo=None)
     end, n = now + timedelta(hours=1), 0
     for sid, code, *_ in STATIONS:
-        start = since
-        if start is None:
-            last = conn.execute("SELECT MAX(ts) FROM air_obs WHERE station = ?", (code,)).fetchone()[0]
-            start = (datetime.fromtimestamp(last, weather.LOCAL_TZ).replace(tzinfo=None) - timedelta(hours=6)
-                     if last else now - timedelta(days=default_days))
+        last = conn.execute("SELECT MAX(ts) FROM air_obs WHERE station = ?", (code,)).fetchone()[0]
+        start = (datetime.fromtimestamp(last, weather.LOCAL_TZ).replace(tzinfo=None) - timedelta(hours=6)
+                 if last else now - timedelta(days=default_days))
         while start < end:
             stop = min(start + timedelta(days=DLI_CHUNK_DAYS), end)
             try:
@@ -154,6 +198,8 @@ def collect_obs(conn, since: datetime | None = None, default_days: int = 30) -> 
             except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
                 log.warning("%s %s..%s: %s", code, start, stop, exc)  # some stations are offline: go on
                 break
+            finally:
+                time.sleep(pause)
             start = stop
     return n
 
@@ -204,7 +250,7 @@ def collect_model(conn) -> int:
     return sum(store_model(conn, fetch_model(stations[i:i + CHUNK], past_days=past)) for i in range(0, len(stations), CHUNK))
 
 
-def collect(db_path: str, since: datetime | None = None) -> tuple[int, int]:
+def collect(db_path: str) -> tuple[int, int]:
     conn = connect(db_path)
     try:
         failed = None
@@ -213,7 +259,7 @@ def collect(db_path: str, since: datetime | None = None) -> tuple[int, int]:
         except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
             model, failed = 0, exc
             log.error("CAMS: %s", exc)
-        obs = collect_obs(conn, since)
+        obs = collect_obs(conn)
         log.info("%d hourly measurements, %d model hours stored", obs, model)
         if failed and not obs:
             raise failed
@@ -261,12 +307,23 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Air quality: DLI measurements + CAMS model per weather station")
     parser.add_argument("--config", help="config.env path (default: ./config.env)")
     parser.add_argument("--db", help="SQLite path, overrides ARANET_WEATHER_DB")
-    parser.add_argument("--since", help="re-read the measurements from this date (YYYY-MM-DD; history since 2016)")
+    parser.add_argument("--since", help="only backfill the measurements back to this date (YYYY-MM-DD; "
+                        "the history starts in 2016); resumable, ~10 s per request")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    since = datetime.strptime(args.since, "%Y-%m-%d") if args.since else None
+    path = args.db or get_settings(args.config).weather_db
     try:
-        collect(args.db or get_settings(args.config).weather_db, since)
+        if args.since:
+            conn = connect(path)
+            try:
+                log.info("backfill done: %d hours", backfill_obs(conn, datetime.strptime(args.since, "%Y-%m-%d")))
+            finally:
+                conn.close()
+        else:
+            collect(path)
+    except Blocked as exc:
+        log.error("the site refused us, stopping: %s", exc)
+        return 1
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
         log.error("failed: %s", exc)
         return 1

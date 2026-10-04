@@ -69,6 +69,7 @@ def test_collect_backfills_then_refreshes(tmp_path, monkeypatch):
         return [{"station": code, "ts": int(end.timestamp()) // 3600 * 3600, "pm25": 1.0, "pm10": None,
                  "no2": None, "o3": None, "so2": None, "co": None}]
 
+    monkeypatch.setattr(air.time, "sleep", lambda s: None)
     monkeypatch.setattr(air, "fetch_model", fake_model)
     monkeypatch.setattr(air, "fetch_dli", fake_dli)
     obs, model = air.collect(path)
@@ -115,3 +116,39 @@ def test_api_air(tmp_path):
         assert empty["ts"] == [] and empty["sources"] == {}
     finally:
         srv.shutdown()
+
+
+def test_backfill_goes_back_resumes_and_stops(tmp_path, monkeypatch):
+    conn = air.connect(str(tmp_path / "w.db"))
+    sleeps, calls = [], []
+    monkeypatch.setattr(air.time, "sleep", sleeps.append)
+    monkeypatch.setattr(air, "STATIONS", air.STATIONS[:2])
+    born = datetime(2025, 1, 1)
+
+    def fake_dli(sid, code, start, end):
+        calls.append((code, start, end))
+        if code == "NICRES" and len([c for c in calls if c[0] == code]) == 1:
+            raise OSError("500")  # one transient failure: retried after a pause
+        if end <= born:
+            return []  # the station didn't exist yet
+        return [{"station": code, "ts": int(end.timestamp()) - 3600, "pm25": 1.0, "pm10": None, "no2": None,
+                 "o3": None, "so2": None, "co": None}]
+
+    monkeypatch.setattr(air, "fetch_dli", fake_dli)
+    air.store_obs(conn, [{"station": "NICTRA", "ts": int(datetime(2025, 9, 1, tzinfo=weather.LOCAL_TZ).timestamp()), "pm25": 1.0,
+                          "pm10": None, "no2": None, "o3": None, "so2": None, "co": None}])
+    air.backfill_obs(conn, datetime(2016, 1, 1), pause=10)
+    tra = [c for c in calls if c[0] == "NICTRA"]
+    assert tra[0][2] == datetime(2025, 9, 1)  # starts at the earliest stored value (local time)
+    assert all(a[1] == b[2] for a, b in zip(tra, tra[1:]))  # contiguous, going back
+    assert tra[-1][2] < born and tra[-1][1] > datetime(2023, 1, 1)  # a year of nothing: stop, not 2016
+    assert 10 in sleeps and 60 in sleeps  # crawl delay + backoff
+    res = [c for c in calls if c[0] == "NICRES"]
+    assert res[0] == res[1]  # the failed chunk was asked again
+    monkeypatch.setattr(air, "fetch_dli", lambda *a: (_ for _ in ()).throw(
+        air.urllib.error.HTTPError("u", 429, "Too Many Requests", {}, None)))
+    try:
+        air.backfill_obs(conn, datetime(2016, 1, 1))
+        assert False, "should stop"
+    except air.Blocked:
+        pass
