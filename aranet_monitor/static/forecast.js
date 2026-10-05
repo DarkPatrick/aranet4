@@ -55,7 +55,11 @@
     $("month").classList.toggle("hidden", !m);
     if (m) {
       const p = (m.period || "").match(/^(\d{4})-(\d{2})$/);
-      if (p) $("month-h").textContent = `Прошлый месяц: ${monthName(+p[1], +p[2])} ${p[1]}`;
+      // the bulletin for a month comes out some days into the next one (2025–26: the 6th to the 22nd)
+      const now = new Date(), prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const late = p && (+p[1] !== prev.getFullYear() || +p[2] !== prev.getMonth() + 1);
+      if (p) $("month-h").textContent = `${late ? "Последний месячный отчёт" : "Прошлый месяц"}: ${monthName(+p[1], +p[2])} ${p[1]}`;
+      const lateNote = late ? `<div class="note" style="margin:0 0 8px">Отчёт за ${monthName(prev.getFullYear(), prev.getMonth() + 1).toLowerCase()} ещё не вышел: метеослужба обычно публикует отчёт за прошлый месяц ближе к середине текущего — появится здесь сам.</div>` : "";
       const tile = (label, value, sub) => `<div class="tile"><div class="label">${label}</div><div class="value">${value}</div>${sub ? `<div class="note" style="margin:0">${sub}</div>` : ""}</div>`;
       const norm = k => m.norms && m.norms[k] ? ` ${m.norms[k]}` : "";  // baseline as the report states it
       const tiles = [
@@ -67,7 +71,7 @@
       const more = [["events", "Заметные явления"], ["rain", "Осадки"], ["temperature", "Температура"]]
         .filter(([k]) => sec[k] && sec[k].el)
         .map(([k, title]) => `<details><summary class="note" style="cursor:pointer">${title}</summary><p${lang(sec[k])}>${esc(ru(sec[k]))}</p></details>`).join("");
-      $("month").innerHTML = `<div class="tiles" style="margin:0 0 8px">${tiles}</div>
+      $("month").innerHTML = `${lateNote}<div class="tiles" style="margin:0 0 8px">${tiles}</div>
         ${sec.general ? `<p${lang(sec.general)}>${esc(ru(sec.general))}</p>` : ""}${more}
         <div class="note">Ежемесячный бюллетень метеослужбы. <a href="${esc(m.url)}" target="_blank" rel="noopener">Полный документ (PDF, по-гречески)</a></div>`;
     }
@@ -77,6 +81,7 @@
     try {
       data = await (await fetch("/api/weather/forecast", { cache: "no-store" })).json();
     } catch (e) { $("meta").textContent = "ошибка загрузки: " + e.message; return; }
+    renderClimate(data.climate); // independent of the bulletins
     if (!data.bulletins.length) { $("meta").textContent = "прогнозов пока нет — запусти aranet-forecast"; return; }
     const order = ["A", "B", "C"];
     $("issues").innerHTML = data.bulletins.slice().sort((x, y) => order.indexOf(x.issue) - order.indexOf(y.issue))
@@ -85,7 +90,6 @@
     if (!current) current = data.bulletins[0].issue; // newest
     $("map-img").src = `${data.map_image}?v=${data.bulletins[0].issued}`;
     render();
-    renderClimate(data.climate);
   }
 
   load();
