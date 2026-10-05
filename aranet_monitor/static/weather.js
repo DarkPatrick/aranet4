@@ -157,9 +157,9 @@
   }
 
   // "Всё" spans both sources: the station's history and the home sensor's
-  let homeFirst = null;
+  let homeFirst = null, airFirst = null; // the air-quality history (since 2016) can open the period further back
   function setBounds(st) {
-    const firsts = [st.first, homeFirst].filter(Boolean);
+    const firsts = [st.first, homeFirst, airFirst].filter(Boolean);
     periods.setBounds(firsts.length ? Math.min(...firsts) * 1000 : null);
   }
 
@@ -274,6 +274,7 @@
     setTilesFor(byCode[selected]);
     const latest = await getJSON("/api/latest");
     homeFirst = latest.range && latest.range.first ? latest.range.first : null;
+    airFirst = (await getJSON("/api/weather/air/first")).first;
     setBounds(byCode[selected]);
     return true;
   }
@@ -489,6 +490,9 @@
     const seq = ++airSeq;
     const url = r => `/api/weather/air?station=${encodeURIComponent(st.code)}&${q(r)}`;
     const [dB, dA] = await Promise.all([getJSON(url(rb)), ra ? getJSON(url(ra)) : Promise.resolve(null)]);
+    // long periods come as daily means; the tiles still need the latest hours
+    const daily = dB.step >= 86400;
+    const dNow = daily ? await getJSON(url([now - 6 * 3600e3, now + 3600e3])) : dB;
     if (seq !== airSeq) return;
     const measured = p => !!dB.sources[p] && dB[p].some(v => v != null);
     const where = s => `${s.name}, ${s.kind}, ${num(s.km, 0)} км`;
@@ -496,28 +500,30 @@
       const meas = measured(m.p), key = meas ? m.p : m.p + "_cams";
       m.key = key;
       m.extra = meas ? { key: m.p + "_cams", label: "модель CAMS", dash: "dotted" } : null;
+      m.daily = daily;
       m.title = meas ? `${m.name}, мкг/м³ · ${where(dB.sources[m.p])} · точками — модель CAMS`
                      : m.p === "dust" ? `${m.name}, мкг/м³` : `${m.name}, мкг/м³ · модель CAMS (рядом не меряют)`;
+      if (daily) m.title += " · суточные средние";
       const has = dB[key].some(v => v != null);
       airCharts[i].show(has);
       if (has) { airCharts[i].applyTheme(); airCharts[i].set(toMs(dB), dA ? toMs(dA, offset) : null, offset, rb); }
     });
 
     // tiles: the latest measurement (≤ 3 h old), else the model's current hour
-    const iNow = dB.ts.findIndex(t => t * 1000 > now - 3600e3 && t * 1000 <= now);
-    const cams = k => iNow >= 0 ? dB[k + "_cams"][iNow] : null;
+    const iNow = dNow.ts.findIndex(t => t * 1000 > now - 3600e3 && t * 1000 <= now);
+    const cams = k => iNow >= 0 ? dNow[k + "_cams"][iNow] : null;
     const latest = p => {
-      for (let i = dB.ts.length - 1; i >= 0; i--) {
-        if (dB.ts[i] * 1000 > now) continue;
-        if (dB.ts[i] * 1000 < now - 3 * 3600e3) break;
-        if (dB[p][i] != null) return { v: dB[p][i], at: dB.ts[i] * 1000 };
+      for (let i = dNow.ts.length - 1; i >= 0; i--) {
+        if (dNow.ts[i] * 1000 > now) continue;
+        if (dNow.ts[i] * 1000 < now - 3 * 3600e3) break;
+        if (dNow[p][i] != null) return { v: dNow[p][i], at: dNow.ts[i] * 1000 };
       }
       return null;
     };
     const tile = (lbl, value, sub) => `<div class="tile"><div class="label">${lbl}</div><div class="value">${value}<span class="unit">${value === "–" ? "" : "мкг/м³"}</span></div><div class="note" style="margin:0">${sub}</div></div>`;
     const tiles = ["pm25", "pm10", "no2", "o3"].map(p => {
       const name = AIR.find(m => m.p === p).name, x = latest(p), c = cams(p);
-      if (x) return tile(name, num(x.v, 1), `${airLevel(p, x.v)} · ${dB.sources[p].name}, ${hm(x.at)}${c != null ? ` · модель ${num(c, 1)}` : ""}`);
+      if (x) return tile(name, num(x.v, 1), `${airLevel(p, x.v)} · ${dNow.sources[p].name}, ${hm(x.at)}${c != null ? ` · модель ${num(c, 1)}` : ""}`);
       return tile(name, c != null ? num(c, 1) : "–", c != null ? `${airLevel(p, c)} · модель CAMS` : "нет данных");
     });
     const dust = cams("dust"), aqi = cams("eaqi");

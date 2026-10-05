@@ -6,6 +6,8 @@ GET /weather/outdoor/forecast -> static/forecast.html (forecast bulletins, trans
 GET /api/weather/forecast -> latest bulletins A/B/C with Russian translations
 GET /api/weather/uv?station=CODE&from=T&to=T -> hourly CAMS UV index (incl. forecast hours)
 GET /api/weather/air?station=CODE&from=T&to=T -> hourly air quality: CAMS at the station + nearest DLI measurements
+                                                  (daily means for periods over ~3 months)
+GET /api/weather/air/first -> when the air-quality measurements begin
 GET /static/<file>        -> static assets (echarts is vendored, works offline)
 GET /api/readings?hours=N -> readings for the last N hours (no param: everything)
 GET /api/readings?from=T&to=T -> readings in [from, to], unix seconds, either bound optional
@@ -68,6 +70,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._file(STATIC_DIR / "weather.html")
             elif url.path in ("/weather/outdoor/forecast", "/weather/outdoor/forecast/"):
                 self._file(STATIC_DIR / "forecast.html")
+            elif url.path == "/api/weather/air/first":
+                self._json({"first": self._with_weather(air.first_ts)})
             elif url.path in ("/api/weather/uv", "/api/weather/air"):
                 q = parse_qs(url.query)
                 station = q.get("station", [""])[0]

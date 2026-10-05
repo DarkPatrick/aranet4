@@ -40,6 +40,7 @@ UA = {"User-Agent": "aranet-monitor/0.1 (+https://github.com/DarkPatrick/aranet4
 CHUNK = 30  # weather stations per Open-Meteo request
 DLI_CHUNK_DAYS = 60  # one station_data request covers at most this many days
 CRAWL_DELAY = 10  # s between requests to the DLI site, as its robots.txt asks
+DAILY_AFTER = 92 * 86400  # longer periods come as daily means (ten years of hours is ~10 MB of JSON)
 
 # (DLI id, code, name, kind, lat, lon). Coordinates from the site's JSON:API
 # (/jsonapi/node/station); the two EAC stations have none there, so those are the
@@ -295,12 +296,39 @@ def readings(conn, station: str, ts_from: int | None = None, ts_to: int | None =
     cols = ["pm25", "pm10", "no2", "o3", "so2", "dust", "eaqi"]
     by_ts = {r[0]: r for r in model}
     ts = sorted(set(by_ts) | {t for o in obs.values() for t in o})
-    out = {"ts": ts, "sources": sources}
+    out = {"ts": ts, "sources": sources, "step": 3600}
     for i, c in enumerate(cols, 1):
         out[c + "_cams"] = [by_ts[t][i] if t in by_ts else None for t in ts]
     for p in POLLUTANTS:
         out[p] = [obs[p].get(t) for t in ts] if p in obs else []
+    if ts and ts[-1] - ts[0] > DAILY_AFTER:
+        out = daily_means(out)
     return out
+
+
+def daily_means(d: dict) -> dict:
+    """Hourly columns -> means per local day (stamped at local noon), skipping gaps."""
+    day = lambda t: datetime.fromtimestamp(t, weather.LOCAL_TZ).date()
+    keys = [k for k, v in d.items() if isinstance(v, list) and k != "ts" and len(v) == len(d["ts"])]
+    acc: dict = {}
+    for i, t in enumerate(d["ts"]):
+        a = acc.setdefault(day(t), {k: [] for k in keys})
+        for k in keys:
+            if d[k][i] is not None:
+                a[k].append(d[k][i])
+    days = sorted(acc)
+    out = {**d, "step": 86400,
+           "ts": [int(datetime(x.year, x.month, x.day, 12, tzinfo=weather.LOCAL_TZ).timestamp()) for x in days]}
+    for k in keys:
+        out[k] = [round(sum(acc[x][k]) / len(acc[x][k]), 1) if acc[x][k] else None for x in days]
+    return out
+
+
+def first_ts(conn) -> int | None:
+    try:
+        return conn.execute("SELECT MIN(ts) FROM air_obs").fetchone()[0]
+    except sqlite3.OperationalError:
+        return None
 
 
 def main(argv=None) -> int:

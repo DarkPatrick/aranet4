@@ -451,7 +451,8 @@ window.UI = (() => {
     let top = Number.isFinite(bands[n].to) ? bands[n].to : hi * 1.1;
     if (fitData && hi > 0) {
       const mag = Math.pow(10, Math.floor(Math.log10(hi * 1.15))) / 2;
-      top = Math.min(top, Math.ceil(hi * 1.15 / mag) * mag);
+      const nice = Math.ceil(hi * 1.15 / mag) * mag;
+      top = Number.isFinite(bands[n].to) ? Math.min(top, nice) : nice;
     }
     const spans = bands.slice(0, n + 1).map((b, i) => ({ from: i ? bands[i - 1].to : 0, to: Math.min(b.to, top), label: b.label, color: b.color, i }));
     return { yAxis: { min: 0, max: top }, labels: bandLayers(spans, [0, top], seriesB) };
