@@ -71,6 +71,9 @@ window.UI = (() => {
   // the bucket a timestamp stands for, by aggregation step
   const fmtBucket = (agg, ms) => ({ hour: fmtTime, day: fmtDay, week: fmtWeek, month: fmtMonth, year: fmtYear }[agg] || fmtTime)(ms);
 
+  const textCanvas = document.createElement("canvas").getContext("2d");
+  const textWidth = (text, font) => { textCanvas.font = font; return textCanvas.measureText(text).width; };
+
   class Periods {
     constructor(container, ns, onChange) {
       container.innerHTML = PANEL;
@@ -540,8 +543,7 @@ window.UI = (() => {
               : { showSymbol: false, sampling: "lttb", lineStyle: { width: 2, color: c }, itemStyle: { color: c } }, extra);
       const opt = {
         animation: false,
-        title: { text: m.title + (this.how || ""), left: 12, top: 8, textStyle: { fontSize: 13, color: css("--text"), fontWeight: 600 } },
-        grid: { left: 56, right: 20, top: 40, bottom: 32 },
+        ...this.titleOption(),
         tooltip: {
           trigger: "axis", formatter: p => this.tooltip(p), confine: true,
           backgroundColor: css("--card"), borderColor: css("--border"), textStyle: { color: css("--text") },
@@ -580,8 +582,8 @@ window.UI = (() => {
       // server-side aggregation (agg.py): say it in the title
       this.agg = setB && setB.agg;
       const aggStep = setB && setB.step ? setB.step * 1000 : 0;
-      const how = this.how = AGG_TITLE[this.agg] ? ` · ${AGG_TITLE[this.agg]}, ${m.bar ? "сумма" : setB.stat === "median" ? "медиана" : "среднее"}` : "";
-      this.chart.setOption({ title: { text: m.title + how } });
+      this.how = AGG_TITLE[this.agg] ? ` · ${AGG_TITLE[this.agg]}, ${m.bar ? "сумма" : setB.stat === "median" ? "медиана" : "среднее"}` : "";
+      this.chart.setOption(this.titleOption());
       if (m.bar) {
         const span = range[1] - range[0];
         // sums add up, so re-bucketing aggregated sums is fine; never finer than the server's step
@@ -658,12 +660,29 @@ window.UI = (() => {
       this.chart.setOption({ graphic: { elements } }, { replaceMerge: ["graphic"] });
     }
 
-    show(on) { this.el.classList.toggle("hidden", !on); if (on) { this.chart.resize(); this.placeBandNames(); } }
+    // title on the first line; m.subtitle (source, what the dotted line is) and the aggregation step
+    // on a smaller second one that wraps on narrow screens, the plot moves down to make room
+    titleOption() {
+      const m = this.m, w = Math.max(120, this.chart.getWidth() - 24);
+      const sub = [m.subtitle, (this.how || "").replace(/^ · /, "")].filter(Boolean).join(" · ");
+      const lines = (text, font) => text ? Math.max(1, Math.ceil(textWidth(text, font) / w)) : 0;
+      const nTitle = lines(m.title, "600 13px sans-serif"), nSub = lines(sub, "11px sans-serif");
+      return {
+        title: { text: m.title, subtext: sub, left: 12, top: 8, itemGap: 3,
+                 textStyle: { fontSize: 13, lineHeight: 16, color: css("--text"), fontWeight: 600, width: w, overflow: "break" },
+                 subtextStyle: { fontSize: 11, lineHeight: 14, color: css("--muted"), width: w, overflow: "break" } },
+        grid: { left: 56, right: 20, top: 24 + 16 * nTitle + (nSub ? 3 + 14 * nSub : 0), bottom: 32 },
+      };
+    }
+
+    relayout() { this.chart.resize(); this.chart.setOption(this.titleOption()); this.placeBandNames(); }
+
+    show(on) { this.el.classList.toggle("hidden", !on); if (on) this.relayout(); }
   }
 
   function linkCharts(charts) {
     echarts.connect(charts.map(c => c.chart));
-    window.addEventListener("resize", () => charts.forEach(c => { c.chart.resize(); if (c.placeBandNames) c.placeBandNames(); }));
+    window.addEventListener("resize", () => charts.forEach(c => c.relayout ? c.relayout() : c.chart.resize()));
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => charts.forEach(c => c.applyTheme()));
   }
 

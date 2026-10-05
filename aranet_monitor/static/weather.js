@@ -430,7 +430,7 @@
     // altitude correction only where it changes something (stations above ~150 m)
     const alt = uB.elevation != null && uB.elevation >= 150;
     UV.extra = alt ? { key: "uv_alt", label: `с поправкой на высоту ${Math.round(uB.elevation)} м`, dash: "dotted" } : null;
-    UV.title = alt ? `UV-индекс (CAMS) · точками — с поправкой на высоту ${Math.round(uB.elevation)} м` : "UV-индекс (CAMS)";
+    UV.subtitle = alt ? `точками — с поправкой на высоту ${Math.round(uB.elevation)} м` : "";
     uvChart.show(uB.ts.length > 0);
     if (uB.ts.length) { uvChart.applyTheme(); uvChart.set(toMs(uB), uA ? toMs(uA, offset) : null, offset, rb); }
 
@@ -502,8 +502,9 @@
       const meas = measured(m.p), key = meas ? m.p : m.p + "_cams";
       m.key = key;
       m.extra = meas ? { key: m.p + "_cams", label: "модель CAMS", dash: "dotted" } : null;
-      m.title = meas ? `${m.name}, мкг/м³ · ${where(dB.sources[m.p])} · точками — модель CAMS`
-                     : m.p === "dust" ? `${m.name}, мкг/м³` : `${m.name}, мкг/м³ · модель CAMS (рядом не меряют)`;
+      m.title = `${m.name}, мкг/м³`;
+      m.subtitle = meas ? `${where(dB.sources[m.p])} · точками — модель CAMS`
+                        : m.p === "dust" ? "" : "модель CAMS (рядом не меряют)";
       const has = dB[key].some(v => v != null);
       airCharts[i].show(has);
       if (has) { airCharts[i].applyTheme(); airCharts[i].set(toMs(dB), dA ? toMs(dA, offset) : null, offset, rb); }
