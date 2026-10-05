@@ -6,7 +6,6 @@ GET /weather/outdoor/forecast -> static/forecast.html (forecast bulletins, trans
 GET /api/weather/forecast -> latest bulletins A/B/C with Russian translations
 GET /api/weather/uv?station=CODE&from=T&to=T -> hourly CAMS UV index (incl. forecast hours)
 GET /api/weather/air?station=CODE&from=T&to=T -> hourly air quality: CAMS at the station + nearest DLI measurements
-                                                  (daily means for periods over ~3 months)
 GET /api/weather/air/first -> when the air-quality measurements begin
 GET /static/<file>        -> static assets (echarts is vendored, works offline)
 GET /api/readings?hours=N -> readings for the last N hours (no param: everything)
@@ -18,6 +17,10 @@ GET /api/weather/readings?station=CODE&from=T&to=T -> one station's observations
 GET /api/weather/marine   -> latest sea forecast, sea surface temperature history, current warnings
 GET /api/weather/climate/stations -> stations in the daily archive (since 2016)
 GET /api/weather/climate?station=CODE&from=T&to=T -> daily Tmax / Tmin / rain
+
+The series endpoints (readings, weather/readings, weather/uv, weather/air) take
+&agg=raw|hour|day|week|month|year|auto (default raw) and &stat=mean|median: local
+calendar buckets, see agg.py; the answer says which "agg" was used.
 """
 
 import argparse
@@ -32,7 +35,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import air, db, dom, forecast, uv, weather
+from . import agg, air, db, dom, forecast, uv, weather
 from .config import get_settings
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -78,7 +81,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not station:
                     raise ValueError("station is required")
                 fn = uv.readings if url.path.endswith("/uv") else air.readings
-                self._json(self._with_weather(fn, station, *self._range(q)))
+                self._json(agg.aggregate(self._with_weather(fn, station, *self._range(q)), *self._agg(q)))
             elif url.path == "/api/weather/forecast":
                 self._json(self._with_weather(forecast.latest))
             elif url.path == "/api/weather/stations":
@@ -121,6 +124,10 @@ class Handler(BaseHTTPRequestHandler):
             conn.close()
 
     @staticmethod
+    def _agg(query):
+        return query.get("agg", ["raw"])[0] or "raw", query.get("stat", ["mean"])[0] or "mean"
+
+    @staticmethod
     def _range(query):
         def param(name):
             v = query.get(name, [None])[0]
@@ -143,18 +150,15 @@ class Handler(BaseHTTPRequestHandler):
         station = query.get("station", [""])[0]
         if not station:
             raise ValueError("station is required")
-        self._json(self._with_weather(weather.readings, station, *self._range(query)))
+        data = self._with_weather(weather.readings, station, *self._range(query))
+        # 10-min precipitation adds up, the 24 h total is a running value, direction is circular
+        self._json(agg.aggregate(data, *self._agg(query), sums={"rain"}, maxes={"rain24"}, circular={"wdir"}))
 
     def _readings(self, query):
         rows = self._with_db(db.fetch_readings, *self._range(query))
         # columnar: smaller payload and maps straight onto echarts series
-        self._json({
-            "ts": [r["ts"] for r in rows],
-            "co2": [r["co2"] for r in rows],
-            "temperature": [r["temperature"] for r in rows],
-            "humidity": [r["humidity"] for r in rows],
-            "pressure": [r["pressure"] for r in rows],
-        })
+        cols = {c: [r[c] for r in rows] for c in ("ts", "co2", "temperature", "humidity", "pressure")}
+        self._json(agg.aggregate(cols, *self._agg(query)))
 
     def _static(self, name: str):
         path = (STATIC_DIR / name).resolve()

@@ -38,6 +38,14 @@ window.UI = (() => {
       </div>
       <label>с <input type="date" data-f="b-from"></label>
       <label>по <input type="date" data-f="b-to"></label>
+      <span class="nowrap">шаг <select data-f="agg">
+        <option value="auto">авто</option><option value="raw">как есть</option><option value="hour">час</option>
+        <option value="day">сутки</option><option value="week">неделя</option><option value="month">месяц</option>
+        <option value="year">год</option>
+      </select>
+      <select data-f="stat" title="как сводить значения внутри шага">
+        <option value="mean">среднее</option><option value="median">медиана</option>
+      </select></span>
     </div>
     <div class="row">
       <span class="tag"><span class="swatch a"></span>Сравнить с A</span>
@@ -56,6 +64,13 @@ window.UI = (() => {
       <span class="note" data-f="a-label" style="margin:0"></span>
     </div>`;
 
+  const AGG_NAMES = { raw: "как есть", hour: "час", day: "сутки", week: "неделя", month: "месяц", year: "год" };
+  const AGG_TITLE = { hour: "по часам", day: "по суткам", week: "по неделям", month: "по месяцам", year: "по годам" };
+  const fmtWeek = ms => `неделя с ${new Date(ms).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })}`;
+  const fmtYear = ms => `${new Date(ms).getFullYear()} г.`;
+  // the bucket a timestamp stands for, by aggregation step
+  const fmtBucket = (agg, ms) => ({ hour: fmtTime, day: fmtDay, week: fmtWeek, month: fmtMonth, year: fmtYear }[agg] || fmtTime)(ms);
+
   class Periods {
     constructor(container, ns, onChange) {
       container.innerHTML = PANEL;
@@ -66,7 +81,8 @@ window.UI = (() => {
       this.first = null; // ms of the oldest data point, for "all"
       const g = (k, d) => this.store.get(k, d);
       this.s = { quick: g("quick", "24"), bFrom: g("bFrom", null), bTo: g("bTo", null),
-                 mode: g("mode", "none"), aFrom: g("aFrom", null), aTo: g("aTo", null) };
+                 mode: g("mode", "none"), aFrom: g("aFrom", null), aTo: g("aTo", null),
+                 agg: g("agg", "auto"), stat: g("stat", "mean") };
       if (!this.s.quick && (this.s.bFrom == null || this.s.bTo == null)) this.s.quick = "24";
 
       this.buttons.forEach(btn => btn.addEventListener("click", () => { this.s.quick = btn.dataset.h; this.changed(); }));
@@ -85,6 +101,16 @@ window.UI = (() => {
       this.el("a-from").addEventListener("change", onA);
       this.el("a-to").addEventListener("change", onA);
       this.el("mode").addEventListener("change", () => { this.s.mode = this.el("mode").value; this.changed(); });
+      for (const k of ["agg", "stat"]) this.el(k).addEventListener("change", () => { this.s[k] = this.el(k).value; this.changed(); });
+    }
+
+    // query for the series endpoints; A passes B's resolved step so that both are bucketed alike
+    query(agg = this.s.agg) { return `agg=${agg}&stat=${this.s.stat}`; }
+
+    // "auto" resolves on the server: show what it picked (from the first chart that reports it)
+    resolved(agg) {
+      const opt = this.el("agg").querySelector('option[value="auto"]');
+      opt.textContent = agg && this.s.agg === "auto" ? `авто · ${AGG_NAMES[agg]}` : "авто";
     }
 
     changed() {
@@ -129,6 +155,8 @@ window.UI = (() => {
       if (b[0] != null) this.el("b-from").value = toInput(b[0]);
       if (b[1] != null) this.el("b-to").value = toInput(b[1]);
       this.el("mode").value = s.mode;
+      this.el("agg").value = s.agg;
+      this.el("stat").value = s.stat;
       this.el("a-custom").classList.toggle("hidden", s.mode !== "custom");
       if (s.mode === "custom") {
         if (s.aFrom == null || s.aTo == null) {
@@ -485,7 +513,8 @@ window.UI = (() => {
       const m = this.m, t = params[0].axisValue;
       const gap = this.step * (m.bar ? 0.5 : 1);
       const b = nearest(this.sets.b, m.key, t, gap), a = nearest(this.sets.a, m.key, t, gap);
-      const when = ms => m.bar && this.step >= MONTH ? fmtMonth(ms)
+      const coarse = this.agg && this.agg !== "raw" && this.agg !== "hour";
+      const when = ms => coarse ? fmtBucket(this.agg, ms) : m.bar && this.step >= MONTH ? fmtMonth(ms)
         : m.daily || (m.bar && this.step >= DAY) ? fmtDay(ms) : fmtTime(ms);
       const extra = v => m.describe ? `<div style="color:${css("--muted")};margin-left:16px">${m.describe(v)}</div>` : "";
       const line = (p, color, label, at) => p && p.v != null
@@ -511,7 +540,7 @@ window.UI = (() => {
               : { showSymbol: false, sampling: "lttb", lineStyle: { width: 2, color: c }, itemStyle: { color: c } }, extra);
       const opt = {
         animation: false,
-        title: { text: m.title, left: 12, top: 8, textStyle: { fontSize: 13, color: css("--text"), fontWeight: 600 } },
+        title: { text: m.title + (this.how || ""), left: 12, top: 8, textStyle: { fontSize: 13, color: css("--text"), fontWeight: 600 } },
         grid: { left: 56, right: 20, top: 40, bottom: 32 },
         tooltip: {
           trigger: "axis", formatter: p => this.tooltip(p), confine: true,
@@ -548,14 +577,21 @@ window.UI = (() => {
       }
       this.range = range;
       resetZoom(this.chart); // new data / new period: start unzoomed
+      // server-side aggregation (agg.py): say it in the title
+      this.agg = setB && setB.agg;
+      const aggStep = setB && setB.step ? setB.step * 1000 : 0;
+      const how = this.how = AGG_TITLE[this.agg] ? ` · ${AGG_TITLE[this.agg]}, ${m.bar ? "сумма" : setB.stat === "median" ? "медиана" : "среднее"}` : "";
+      this.chart.setOption({ title: { text: m.title + how } });
       if (m.bar) {
         const span = range[1] - range[0];
-        const size = span > 400 * DAY ? MONTH : span > 3 * DAY ? DAY : HOUR;
+        // sums add up, so re-bucketing aggregated sums is fine; never finer than the server's step
+        let size = span > 400 * DAY ? MONTH : span > 3 * DAY ? DAY : HOUR;
+        if (aggStep >= MONTH) size = MONTH; else if (aggStep >= DAY) size = Math.max(size, DAY); else if (aggStep) size = Math.max(size, aggStep);
         this.sets = { b: bucketSum(setB, m.key, size), a: setA ? bucketSum(setA, m.key, size) : null };
-        this.step = size;
+        this.step = Math.max(size, aggStep);
       } else {
         this.sets = { b: setB, a: setA };
-        this.step = typicalStep(setB);
+        this.step = Math.max(typicalStep(setB), aggStep);
       }
       this.render();
     }

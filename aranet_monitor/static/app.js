@@ -62,8 +62,8 @@
   linkCharts(charts);
 
   const EMPTY = { ts: [], co2: [], temperature: [], humidity: [], pressure: [], pressure_mm: [], humidex: [], pmv: [] };
-  const fetchRange = async ([from, to]) =>
-    (await fetch(`/api/readings?from=${Math.floor(from / 1000)}&to=${Math.ceil(to / 1000)}`, { cache: "no-store" })).json();
+  const fetchRange = async ([from, to], agg) =>
+    (await fetch(`/api/readings?from=${Math.floor(from / 1000)}&to=${Math.ceil(to / 1000)}&${periods.query(agg)}`, { cache: "no-store" })).json();
 
   let loadSeq = 0;
   async function loadCharts() {
@@ -71,8 +71,10 @@
     if (b[0] == null || b[1] == null || b[0] > b[1]) return;
     const a = periods.a(b);
     const seq = ++loadSeq;
-    const [dataB, dataA] = await Promise.all([fetchRange(b), a ? fetchRange(a) : Promise.resolve(EMPTY)]);
+    const dataB = await fetchRange(b);
+    const dataA = a ? await fetchRange(a, dataB.agg) : EMPTY; // A bucketed like B
     if (seq !== loadSeq) return; // a newer selection is already loading
+    periods.resolved(dataB.agg);
     const offset = a ? b[0] - a[0] : 0;
     for (const d of [dataB, dataA]) {
       d.pressure_mm = d.pressure.map(v => v == null ? null : v * HPA_TO_MM);

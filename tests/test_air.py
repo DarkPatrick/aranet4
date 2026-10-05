@@ -48,7 +48,7 @@ def test_readings_pick_the_nearest_station_per_pollutant(tmp_path):
     b = air.readings(conn, "B")
     assert {s["code"] for s in b["sources"].values()} == {"ZYGIND"} and b["pm25_cams"] == [None]
     # a period without measurements: no sources, empty columns
-    assert air.readings(conn, "A", 10000, 20000) == {"ts": [], "sources": {}, "step": 3600, **{f"{c}_cams": [] for c in
+    assert air.readings(conn, "A", 10000, 20000) == {"ts": [], "sources": {}, **{f"{c}_cams": [] for c in
            ["pm25", "pm10", "no2", "o3", "so2", "dust", "eaqi"]}, **{p: [] for p in air.POLLUTANTS}}
 
 
@@ -154,15 +154,9 @@ def test_backfill_goes_back_resumes_and_stops(tmp_path, monkeypatch):
         pass
 
 
-def test_long_periods_come_as_daily_means(tmp_path):
+def test_first_ts(tmp_path):
     conn = setup_db(str(tmp_path / "w.db"))
-    t0 = int(datetime(2020, 4, 1, tzinfo=weather.LOCAL_TZ).timestamp())  # no DST switch within
-    hours = [t0 + h * 3600 for h in range(24 * 100)]
-    air.store_obs(conn, [{"station": "NICRES", "ts": t, "pm25": None, "pm10": None, "no2": float(i % 24),
-                          "o3": None, "so2": None, "co": None} for i, t in enumerate(hours)])
-    d = air.readings(conn, "A")
-    assert d["step"] == 86400 and len(d["ts"]) == 100
-    assert d["ts"][0] == int(datetime(2020, 4, 1, 12, tzinfo=weather.LOCAL_TZ).timestamp())
-    assert d["no2"][0] == 11.5 and d["pm25"] == [] and d["o3_cams"][0] is None
-    assert air.readings(conn, "A", hours[0], hours[0] + 10 * 86400)["step"] == 3600
-    assert air.first_ts(conn) == t0
+    assert air.first_ts(conn) is None
+    air.store_obs(conn, [{"station": "NICRES", "ts": 7200, "pm25": None, "pm10": None, "no2": 1.0, "o3": None,
+                          "so2": None, "co": None}])
+    assert air.first_ts(conn) == 7200

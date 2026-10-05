@@ -178,7 +178,7 @@
   // ---------- data ----------
   const q = ([from, to]) => `from=${Math.floor(from / 1000)}&to=${Math.ceil(to / 1000)}`;
   const getJSON = async url => (await fetch(url, { cache: "no-store" })).json();
-  const fetchStation = (code, range) => getJSON(`/api/weather/readings?station=${encodeURIComponent(code)}&${q(range)}`);
+  const fetchStation = (code, range, agg) => getJSON(`/api/weather/readings?station=${encodeURIComponent(code)}&${q(range)}&${periods.query(agg)}`);
 
   function derive(data, st) {
     const w = pick(WIND, st.metrics), p = pick(PRES, st.metrics);
@@ -194,12 +194,14 @@
     if (!st || b[0] == null || b[1] == null || b[0] > b[1]) return;
     const a = periods.a(b);
     const seq = ++loadSeq;
-    const [dataB, dataA, homeB] = await Promise.all([
-      fetchStation(st.code, b),
-      a ? fetchStation(st.code, a) : Promise.resolve(null),
-      getJSON(`/api/readings?${q(b)}`),
+    const dataB = await fetchStation(st.code, b);
+    // A bucketed like B; the home sensor picks its own step from its own data span
+    const [dataA, homeB] = await Promise.all([
+      a ? fetchStation(st.code, a, dataB.agg) : Promise.resolve(null),
+      getJSON(`/api/readings?${q(b)}&${periods.query()}`),
     ]);
     if (seq !== loadSeq) return; // a newer selection is already loading
+    periods.resolved(dataB.agg);
     derive(dataB, st);
     if (dataA) derive(dataA, st);
     const offset = a ? b[0] - a[0] : 0;
@@ -420,10 +422,9 @@
     const ahead = b[1] >= now - 600e3 ? AHEAD : 0;
     const rb = [b[0], b[1] + ahead], ra = a ? [a[0], a[1] + ahead] : null, offset = a ? b[0] - a[0] : 0;
     const seq = ++uvSeq;
-    const [uB, uA] = await Promise.all([
-      getJSON(`/api/weather/uv?station=${encodeURIComponent(st.code)}&${q(rb)}`),
-      ra ? getJSON(`/api/weather/uv?station=${encodeURIComponent(st.code)}&${q(ra)}`) : Promise.resolve(null),
-    ]);
+    const uvUrl = (r, agg) => `/api/weather/uv?station=${encodeURIComponent(st.code)}&${q(r)}&${periods.query(agg)}`;
+    const uB = await getJSON(uvUrl(rb));
+    const uA = ra ? await getJSON(uvUrl(ra, uB.agg)) : null;
     if (seq !== uvSeq) return;
     sunChart.set(sunSeries(st, rb), ra ? sunSeries(st, ra, offset) : null, offset, rb);
     // altitude correction only where it changes something (stations above ~150 m)
@@ -488,11 +489,12 @@
     const ahead = b[1] >= now - 600e3 ? AHEAD : 0;
     const rb = [b[0], b[1] + ahead], ra = a ? [a[0], a[1] + ahead] : null, offset = a ? b[0] - a[0] : 0;
     const seq = ++airSeq;
-    const url = r => `/api/weather/air?station=${encodeURIComponent(st.code)}&${q(r)}`;
-    const [dB, dA] = await Promise.all([getJSON(url(rb)), ra ? getJSON(url(ra)) : Promise.resolve(null)]);
-    // long periods come as daily means; the tiles still need the latest hours
-    const daily = dB.step >= 86400;
-    const dNow = daily ? await getJSON(url([now - 6 * 3600e3, now + 3600e3])) : dB;
+    const url = (r, agg) => `/api/weather/air?station=${encodeURIComponent(st.code)}&${q(r)}&${periods.query(agg)}`;
+    const dB = await getJSON(url(rb));
+    const dA = ra ? await getJSON(url(ra, dB.agg)) : null;
+    // coarse steps: the tiles still need the latest hours as they are
+    const coarse = !["raw", "hour"].includes(dB.agg);
+    const dNow = coarse ? await getJSON(url([now - 6 * 3600e3, now + 3600e3], "raw")) : dB;
     if (seq !== airSeq) return;
     const measured = p => !!dB.sources[p] && dB[p].some(v => v != null);
     const where = s => `${s.name}, ${s.kind}, ${num(s.km, 0)} км`;
@@ -500,10 +502,8 @@
       const meas = measured(m.p), key = meas ? m.p : m.p + "_cams";
       m.key = key;
       m.extra = meas ? { key: m.p + "_cams", label: "модель CAMS", dash: "dotted" } : null;
-      m.daily = daily;
       m.title = meas ? `${m.name}, мкг/м³ · ${where(dB.sources[m.p])} · точками — модель CAMS`
                      : m.p === "dust" ? `${m.name}, мкг/м³` : `${m.name}, мкг/м³ · модель CAMS (рядом не меряют)`;
-      if (daily) m.title += " · суточные средние";
       const has = dB[key].some(v => v != null);
       airCharts[i].show(has);
       if (has) { airCharts[i].applyTheme(); airCharts[i].set(toMs(dB), dA ? toMs(dA, offset) : null, offset, rb); }
