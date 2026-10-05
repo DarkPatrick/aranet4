@@ -156,6 +156,54 @@
       : "нет данных";
   }
 
+  // ---------- the station nearest to the viewer (browser geolocation; HTTPS or localhost only) ----------
+  const canGeo = "geolocation" in navigator && window.isSecureContext;
+  $("geo").classList.toggle("hidden", !canGeo);
+  let meMarker = null, geoTried = false;
+  const distKm = (lat1, lon1, lat2, lon2) => {
+    const r = Math.PI / 180, a = Math.sin((lat2 - lat1) * r / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lon2 - lon1) * r / 2) ** 2;
+    return 12742 * Math.asin(Math.sqrt(a));
+  };
+  const locate = () => new Promise((ok, err) =>
+    navigator.geolocation.getCurrentPosition(p => ok(p.coords), err, { timeout: 20000, maximumAge: 10 * 60e3 }));
+
+  // nearest station with fresh data (any station if none is fresh)
+  function nearestStation(lat, lon) {
+    const now = Date.now() / 1000, live = stations.filter(s => s.latest && now - s.latest.ts < STALE_S);
+    return (live.length ? live : stations).map(s => ({ st: s, km: distKm(lat, lon, s.lat, s.lon) })).sort((a, b) => a.km - b.km)[0];
+  }
+
+  // byUser: the button (say why it failed); otherwise the automatic pick on opening, which
+  // stays quiet and doesn't override a station chosen while the browser was locating
+  async function goNearest(byUser) {
+    const before = selected;
+    let c;
+    try { c = await locate(); } catch (e) {
+      if (byUser) $("geo-note").textContent = e.code === 1 ? "доступ к геолокации запрещён в настройках браузера" : "не удалось определить местоположение";
+      return;
+    }
+    const near = nearestStation(c.latitude, c.longitude);
+    if (!near) return;
+    if (!meMarker) meMarker = L.circleMarker([c.latitude, c.longitude], { radius: 7, weight: 2, color: "#fff", fillColor: "#2f7fd1", fillOpacity: 1 })
+      .addTo(map).bindTooltip("вы здесь", { direction: "top", offset: [0, -6] });
+    else meMarker.setLatLng([c.latitude, c.longitude]);
+    $("geo-note").textContent = `ближайшая к вам: ${label(near.st.code)}, ${num(near.km, near.km < 10 ? 1 : 0)} км`;
+    if (!byUser && selected !== before) return;
+    if (near.st.code !== selected) select(near.st.code);
+  }
+  $("geo").addEventListener("click", () => goNearest(true));
+
+  // on opening: ask (or use the permission already given), unless the browser has it denied
+  async function autoNearest() {
+    if (!canGeo || geoTried) return;
+    geoTried = true;
+    try {
+      const p = navigator.permissions && await navigator.permissions.query({ name: "geolocation" });
+      if (p && p.state === "denied") return;
+    } catch (e) { /* no Permissions API (older Safari): just ask */ }
+    goNearest(false);
+  }
+
   // "Всё" spans both sources: the station's history and the home sensor's
   let homeFirst = null, airFirst = null; // the air-quality history (since 2016) can open the period further back
   function setBounds(st) {
@@ -587,6 +635,7 @@
       loadClimate().catch(fail);
       loadMarine().then(showRadar).catch(fail);
       if (!(await loadStations())) return;
+      autoNearest(); // once, in the background: charts load for the saved station meanwhile
       periods.sync();
       await loadCharts();
     } catch (e) { fail(e); }
