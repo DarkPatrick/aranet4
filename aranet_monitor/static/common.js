@@ -394,6 +394,12 @@ window.UI = (() => {
     return [css(SUN_COLORS[i]), label, range];
   }).reverse();
   const compass = az => ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"][Math.round(az / 45) % 8];
+  // wind is named by where it blows FROM (meteorological direction)
+  const WIND_NAMES = ["северный", "северо-восточный", "восточный", "юго-восточный", "южный", "юго-западный", "западный", "северо-западный"];
+  const windName = deg => WIND_NAMES[Math.round(deg / 45) % 8];
+  const windDir = deg => deg == null ? "" : `${compass(deg)} (${Math.round(deg)}°)`;
+  // an arrow pointing up = blowing north; rotate by (from + 180) to point downwind
+  const ARROW_PATH = "path://M5 0 L10 9 L6 7.5 L6 20 L4 20 L4 7.5 L0 9 Z";
 
   // UV index, WHO scale
   const UV_SCALE = [[3, "низкий"], [6, "умеренный"], [8, "высокий"], [11, "очень высокий"], [Infinity, "экстремальный"]];
@@ -543,7 +549,7 @@ window.UI = (() => {
       // reference values that aren't drawn (e.g. the official NET next to UTCI)
       for (const n of m.notes || []) {
         const x = nearest(this.sets.b, n.key, t, gap);
-        if (x && x.v != null) html += `<div style="color:${css("--muted")};margin-left:16px">${n.label}: ${num(x.v, m.digits)} ${m.unit}</div>`;
+        if (x && x.v != null) html += `<div style="color:${css("--muted")};margin-left:16px">${n.label}: ${n.fmt ? n.fmt(x.v) : `${num(x.v, m.digits)} ${m.unit}`}</div>`;
       }
       if (a && b && a.v != null && b.v != null) {
         const d = b.v - a.v;
@@ -645,6 +651,23 @@ window.UI = (() => {
           upd.yAxis.max = Math.min(upd.yAxis.max, this.m.limits[1]);
         }
       }
+      // m.arrows: direction arrows (e.g. wind), ~30 across the chart in a strip along the top
+      // (a meteogram's row of arrows), so they don't sit on the line
+      if (this.m.arrows && this.sets.b && !this.m.bar) {
+        const s = this.sets.b, dirs = s[this.m.arrows.key] || [], step = Math.max(1, Math.ceil(s.ts.length / 30));
+        // headroom above the data for the strip: the axis goes up to 1.3x the highest value
+        const hi = Math.max(1, ...[this.sets.b, this.sets.a].filter(Boolean).flatMap(x => x[this.m.key]).filter(v => v != null));
+        const top = Math.ceil(Math.max(upd.yAxis && upd.yAxis.max != null ? upd.yAxis.max : 0, hi * 1.3));
+        upd.yAxis = { ...(upd.yAxis || {}), max: top };
+        const pts = [];
+        for (let i = 0; i < s.ts.length; i += step) {
+          const v = s[this.m.key][i], d = dirs[i];
+          if (v != null && d != null && v >= 0.3) pts.push([s.ts[i], top - (top - hi) / 2, d]);
+        }
+        upd.series.push({ type: "scatter", silent: true, z: 5, symbol: ARROW_PATH, symbolSize: [10, 18],
+                          symbolRotate: p => -(p[2] + 180), itemStyle: { color: css("--text"), opacity: 0.65 },
+                          data: pts, tooltip: { show: false } });
+      }
       // dashed "now" line for charts that reach into the forecast
       if (this.m.nowLine) {
         const now = Date.now(), inView = now >= this.range[0] && now <= this.range[1];
@@ -703,6 +726,6 @@ window.UI = (() => {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => charts.forEach(c => c.applyTheme()));
   }
 
-  return { utciLabel, utciBands, sunPosition, sunTimes, sunPhase, sunBands, sunLegend, compass, uvLabel, uvBands, humidex, humidexLabel, humidexBands, pmv, comfort, pmvAt, pmvLabel, pmvBands, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, tendency, zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
+  return { windName, windDir, utciLabel, utciBands, sunPosition, sunTimes, sunPhase, sunBands, sunLegend, compass, uvLabel, uvBands, humidex, humidexLabel, humidexBands, pmv, comfort, pmvAt, pmvLabel, pmvBands, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, tendency, zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
            Periods, toMs, nearest, typicalStep, stats, renderCompareTable, SeriesChart, linkCharts };
 })();

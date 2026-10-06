@@ -1,5 +1,5 @@
 (() => {
-  const { utciLabel, utciBands, sunPosition, sunTimes, sunPhase, sunBands, sunLegend, compass, uvLabel, uvBands, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, zoomOptions, armZoom, resetZoom, SPARSE, DAY, css, $, store, fmtTime, fmtDay, fmtRange, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
+  const { windName, windDir, utciLabel, utciBands, sunPosition, sunTimes, sunPhase, sunBands, sunLegend, compass, uvLabel, uvBands, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, zoomOptions, armZoom, resetZoom, SPARSE, DAY, css, $, store, fmtTime, fmtDay, fmtRange, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
   const REFRESH_MS = 5 * 60 * 1000;
   const STALE_S = 3600;
   const prefs = store("weather");
@@ -33,7 +33,8 @@
     { key: "rain", el: "c-rain", title: "Осадки, мм", unit: "мм", digits: 1, color: "--rain", bar: true,
       rows: ["sum", { label: "макс. за 10 мин", get: s => s.max }] },
     { key: "wind", el: "c-wind", title: "Ветер, м/с", unit: "м/с", digits: 1, color: "--wind", zeroBased: true, rows: ["mean", "max"],
-      bands: BEAUFORT, describe: beaufort },
+      bands: BEAUFORT, describe: beaufort, arrows: { key: "wdir" },
+      notes: [{ key: "wdir", label: "направление", fmt: d => `${windName(d)} (${Math.round(d)}°)` }] },
     { key: "pres", el: "c-pres", title: "Давление, гПа", unit: "гПа", digits: 1, color: "--pres", rows: ["mean", "min", "max"] },
     { key: "rad_global", el: "c-rad", title: "Солнечная радиация, W/m²", unit: "W/m²", digits: 0, color: "--rad", zeroBased: true, rows: ["mean", "max"] },
     { key: "snow", el: "c-snow", title: "Снег, см", unit: "см", digits: 0, color: "--hum", zeroBased: true, rows: ["mean", "max"] },
@@ -124,6 +125,17 @@
       ? `<span class="rain-ring"></span>Дождь сейчас (за последние 30 мин): ${raining.map(s => label(s.code)).sort().join(", ")}` : "";
   }
 
+  // an arrow from the station downwind, longer for stronger wind (10 m wind + direction only)
+  function windArrow(l, labels) {
+    if (!l || l.wdir == null || l.wind10 == null || l.wind10 < 0.3) return "";
+    const start = labels ? 11 : 7, len = Math.min(8 + l.wind10 * 2.5, 30), R = start + len + 4;
+    const tip = R - start - len, base = R - start;
+    const path = `M${R} ${base} L${R} ${tip + 5} M${R - 4} ${tip + 6} L${R} ${tip} L${R + 4} ${tip + 6}`;
+    return `<svg class="wx-wind" width="${2 * R}" height="${2 * R}" style="transform:translate(-50%,-50%) rotate(${(l.wdir + 180) % 360}deg)">` +
+      `<path d="${path}" stroke="var(--card)" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>` +
+      `<path d="${path}" stroke="var(--text)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  }
+
   function drawMarkers() {
     rainSummary();
     const now = Date.now() / 1000, labels = map.getZoom() >= LABEL_ZOOM;
@@ -134,7 +146,7 @@
       const rain = stale ? null : rainLevel(st.latest.rain_30m);
       const cls = `wx-badge${labels ? "" : " dot"}${st.code === selected ? " sel" : ""}${rain ? ` rain ${rain.cls}` : ""}`;
       const text = labels ? (t == null ? "–" : Math.round(t) + "°") + (rain ? DROP : "") : "";
-      const html = `<span class="${cls}" style="background:${bg};color:${fg}">${text}</span>`;
+      const html = windArrow(stale ? null : st.latest, labels) + `<span class="${cls}" style="background:${bg};color:${fg}">${text}</span>`;
       const icon = L.divIcon({ html, className: "", iconSize: null });
       if (!markers[st.code]) {
         markers[st.code] = L.marker([st.lat, st.lon], { icon, keyboard: false })
@@ -144,7 +156,7 @@
       }
       const l = st.latest || {};
       const parts = [l.temp != null && `${num(l.temp, 1)} °C`, l.rh != null && `${num(l.rh, 0)}%`,
-                     (l.wind10 ?? l.wind2) != null && `ветер ${num(l.wind10 ?? l.wind2, 1)} м/с`].filter(Boolean);
+                     (l.wind10 ?? l.wind2) != null && `ветер ${num(l.wind10 ?? l.wind2, 1)} м/с${l.wdir != null && (l.wind10 ?? 0) >= 0.3 ? ` ${windDir(l.wdir)}` : ""}`].filter(Boolean);
       const rainLine = rain ? `<br><span style="color:${css("--rain")}">${rain.name} дождь: ${num(st.latest.rain_30m, 1)} мм за 30 мин</span>` : "";
       markers[st.code].bindTooltip(`<b>${label(st.code)}</b><br>${parts.join(" · ") || "нет данных"}${rainLine}${stale ? "<br>⚠ данные устарели" : ""}`,
                                    { direction: "top", offset: [0, -8] });
@@ -172,7 +184,8 @@
       ["Ощущается в тени", l.utci_shade, 1, "°C", l.utci_shade != null ? utciLabel(l.utci_shade) : ""],
       ["Ощущается на солнце", l.utci_sun, 1, "°C", l.utci_sun == null ? "" : l.utci_sun === l.utci_shade && sunPosition(l.ts * 1000, st.lat, st.lon).elevation <= 0
         ? "солнце за горизонтом" : `${utciLabel(l.utci_sun)} · радиация: ${radNote(l.rad_src)}`], ["Влажность", l.rh, 0, "%"], ["Осадки за 10 мин", l.rain, 1, "мм"],
-      w && [w[1], l[w[0]], 1, "м/с", l[w[0]] != null ? BEAUFORT.find(b => l[w[0]] < b.to).name : ""], p && [p[1], l[p[0]], 1, "hPa"], ["Радиация", l.rad_global, 0, "W/m²"], ["Снег", l.snow, 0, "см"],
+      w && [w[1], l[w[0]], 1, "м/с", l[w[0]] != null ? BEAUFORT.find(b => l[w[0]] < b.to).name +
+        (l.wdir != null && (l.wind10 ?? 0) >= 0.3 ? ` · ${windName(l.wdir)} (${Math.round(l.wdir)}°)` : "") : ""], p && [p[1], l[p[0]], 1, "hPa"], ["Радиация", l.rad_global, 0, "W/m²"], ["Снег", l.snow, 0, "см"],
     ].filter(x => x && x[1] != null);
     $("tiles").innerHTML = tiles.map(([n, v, d, u, sub]) =>
       `<div class="tile"><div class="label">${n}</div><div class="value">${num(v, d)}<span class="unit">${u}</span></div>${sub ? `<div class="note" style="margin:0">${sub}</div>` : ""}</div>`).join("");
@@ -285,7 +298,7 @@
     const w = pick(WIND, st.metrics), p = pick(PRES, st.metrics);
     const has = m => m.key === "wind" ? !!w : m.key === "pres" ? !!p : st.metrics.includes(m.key);
     METRICS.forEach((m, i) => {
-      if (m.key === "wind" && w) m.title = `${w[1]}, м/с`;
+      if (m.key === "wind" && w) { m.title = `${w[1]}, м/с`; m.subtitle = st.metrics.includes("wdir") ? "стрелки вверху — куда дует ветер" : ""; }
       if (m.key === "utci_shade") m.subtitle = `пунктир — на солнце (радиация: ${radNote(dataB.rad_src)}) · NET метеослужбы — в подсказке`;
       if (m.key === "pres" && p) {
         m.title = `${p[1]}, гПа`;

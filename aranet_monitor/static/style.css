@@ -133,3 +133,4 @@ label.mini select { padding: 1px 4px; font-size: 12px; max-width: 100%; min-widt
 @keyframes rain-pulse { 0% { transform: scale(.85); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .wx-badge.rain::after { animation: none; opacity: .9; } }
 .rain-ring { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--rain); margin-right: 6px; vertical-align: -1px; }
+.wx-wind { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
