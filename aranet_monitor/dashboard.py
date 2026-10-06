@@ -8,6 +8,7 @@ GET /api/weather/uv?station=CODE&from=T&to=T -> hourly CAMS UV index (incl. fore
 GET /api/weather/air?station=CODE&from=T&to=T -> hourly air quality: CAMS at the station + nearest DLI measurements
 GET /api/weather/air/first -> when the air-quality measurements begin
 GET /api/weather/lightning?from=T&to=T -> lightning flashes near Cyprus (Meteosat-12), default the last hour
+GET /api/weather/ai-forecast -> the latest LLM forecast (aranet-ai-forecast), or null
 GET /api/weather/map-history?from=T&to=T -> every station's temp/rh/rain/wind for the map's timeline (up to 4 days)
 GET /static/<file>        -> static assets (echarts is vendored, works offline)
 GET /api/readings?hours=N -> readings for the last N hours (no param: everything)
@@ -38,7 +39,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import agg, air, db, dom, era5, forecast, lightning, uv, weather
+from . import agg, ai_forecast, air, db, dom, era5, forecast, lightning, uv, weather
 from .config import get_settings
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -49,10 +50,12 @@ log = logging.getLogger("aranet.dashboard")
 
 
 class Handler(BaseHTTPRequestHandler):
-    def __init__(self, *args, db_path: str, weather_db: str, lightning_db: str = "data/lightning.db", **kwargs):
+    def __init__(self, *args, db_path: str, weather_db: str, lightning_db: str = "data/lightning.db",
+                 ai_dir: str = "data/ai", **kwargs):
         self.db_path = db_path
         self.weather_db = weather_db
         self.lightning_db = lightning_db
+        self.ai_dir = ai_dir
         super().__init__(*args, **kwargs)
 
     def log_message(self, fmt, *args):
@@ -77,6 +80,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._file(STATIC_DIR / "weather.html")
             elif url.path in ("/weather/outdoor/forecast", "/weather/outdoor/forecast/"):
                 self._file(STATIC_DIR / "forecast.html")
+            elif url.path == "/api/weather/ai-forecast":
+                self._json(ai_forecast.latest(self.ai_dir))
             elif url.path == "/api/weather/map-history":
                 ts_from, ts_to = self._range(parse_qs(url.query))
                 if ts_from is None or ts_to is None or ts_to - ts_from > 4 * 86400:
@@ -243,8 +248,9 @@ def pressure_offset(db_path: str, weather_db: str, days: int = 7, max_gap: int =
 
 
 def make_server(host: str, port: int, db_path: str, weather_db: str = "data/weather.db",
-                lightning_db: str = "data/lightning.db") -> ThreadingHTTPServer:
-    return ThreadingHTTPServer((host, port), partial(Handler, db_path=db_path, weather_db=weather_db, lightning_db=lightning_db))
+                lightning_db: str = "data/lightning.db", ai_dir: str = "data/ai") -> ThreadingHTTPServer:
+    return ThreadingHTTPServer((host, port), partial(Handler, db_path=db_path, weather_db=weather_db,
+                                                     lightning_db=lightning_db, ai_dir=ai_dir))
 
 
 def main(argv=None) -> int:
@@ -257,7 +263,7 @@ def main(argv=None) -> int:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     s = get_settings(args.config)
-    server = make_server(args.host or s.host, args.port or s.port, args.db or s.db_path, s.weather_db, s.lightning_db)
+    server = make_server(args.host or s.host, args.port or s.port, args.db or s.db_path, s.weather_db, s.lightning_db, s.ai_dir)
     log.info("dashboard on http://%s:%d (db %s)", *server.server_address[:2], args.db or s.db_path)
     try:
         server.serve_forever()

@@ -32,6 +32,7 @@ class Settings:
     sync_key: str
     weather_db: str
     lightning_db: str
+    ai_dir: str
 
 
 def get_settings(config_file: str | None = None) -> Settings:
@@ -45,4 +46,5 @@ def get_settings(config_file: str | None = None) -> Settings:
         sync_key=os.path.expanduser(os.environ.get("ARANET_SYNC_KEY", "~/.ssh/id_ed25519_aranet_sync")),
         weather_db=os.environ.get("ARANET_WEATHER_DB", "data/weather.db"),
         lightning_db=os.environ.get("ARANET_LIGHTNING_DB", "data/lightning.db"),
+        ai_dir=os.environ.get("ARANET_AI_DIR", "data/ai"),
     )
