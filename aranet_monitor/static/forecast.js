@@ -103,6 +103,7 @@
       </div>
       <p>${esc(h.overview)}</p>
       <div class="scroll"><table class="cmp ai"><tr><th>Район</th><th>Температура</th><th>Осадки</th><th>Гроза</th><th>Ветер</th><th>Заметки</th></tr>${rows}</table></div>
+      <div class="note" style="margin:4px 0 0">Проценты — вероятность, что где-нибудь в районе с момента выпуска до конца периода будут осадки (от 0,2 мм) или гроза; в конкретной точке шанс ниже, особенно для местных ливней. Период «24 ч» включает и первые 4 и 12 часов. Температура — диапазон за тот же период.</div>
       ${f.risks.length ? `<div class="tag" style="margin:10px 0 4px">Риски</div><ul class="ai-risks">${f.risks.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
       <details><summary class="note" style="cursor:pointer">Где модель ECMWF ошибалась за прошедшие сутки</summary><p>${esc(f.model_vs_obs)}</p></details>`;
     document.querySelectorAll("#ai-tabs button").forEach(b => b.addEventListener("click", () => { aiHorizon = +b.dataset.h; renderAi(); }));
