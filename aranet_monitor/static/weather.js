@@ -382,9 +382,6 @@
     }
     const near = nearestStation(c.latitude, c.longitude);
     if (!near) return;
-    // the AI forecast is written for the viewer's last known place
-    fetch("/api/weather/location", { method: "POST", headers: { "Content-Type": "application/json" },
-                                     body: JSON.stringify({ lat: c.latitude, lon: c.longitude }) }).catch(() => {});
     if (!meMarker) meMarker = L.circleMarker([c.latitude, c.longitude], { radius: 7, weight: 2, color: "#fff", fillColor: "#2f7fd1", fillOpacity: 1 })
       .addTo(map).bindTooltip("вы здесь", { direction: "top", offset: [0, -6] });
     else meMarker.setLatLng([c.latitude, c.longitude]);

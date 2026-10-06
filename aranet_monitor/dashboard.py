@@ -9,7 +9,6 @@ GET /api/weather/air?station=CODE&from=T&to=T -> hourly air quality: CAMS at the
 GET /api/weather/air/first -> when the air-quality measurements begin
 GET /api/weather/lightning?from=T&to=T -> lightning flashes near Cyprus (Meteosat-12), default the last hour
 GET /api/weather/ai-forecast -> the latest LLM forecast (aranet-ai-forecast), or null
-GET/POST /api/weather/location -> the viewer's last location (POST {lat, lon} from the browser, Cyprus area only)
 GET /api/weather/map-history?from=T&to=T -> every station's temp/rh/rain/wind for the map's timeline (up to 4 days)
 GET /static/<file>        -> static assets (echarts is vendored, works offline)
 GET /api/readings?hours=N -> readings for the last N hours (no param: everything)
@@ -81,8 +80,6 @@ class Handler(BaseHTTPRequestHandler):
                 self._file(STATIC_DIR / "weather.html")
             elif url.path in ("/weather/outdoor/forecast", "/weather/outdoor/forecast/"):
                 self._file(STATIC_DIR / "forecast.html")
-            elif url.path == "/api/weather/location":
-                self._json(ai_forecast.read_location(Path(self.weather_db).parent))
             elif url.path == "/api/weather/ai-forecast":
                 self._json(ai_forecast.latest(self.ai_dir))
             elif url.path == "/api/weather/map-history":
@@ -131,25 +128,6 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
         except ValueError as exc:
-            self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-
-    def do_POST(self):
-        url = urlparse(self.path)
-        try:
-            if url.path != "/api/weather/location":
-                self.send_error(HTTPStatus.NOT_FOUND)
-                return
-            size = int(self.headers.get("Content-Length") or 0)
-            if not 0 < size <= 1024:
-                raise ValueError("bad body")
-            body = json.loads(self.rfile.read(size))
-            lat, lon = float(body["lat"]), float(body["lon"])
-            # where the forecast can say something: Cyprus and the sea around it
-            if not (lightning.BOX[0] <= lat <= lightning.BOX[1] and lightning.BOX[2] <= lon <= lightning.BOX[3]):
-                self._json({"stored": False, "reason": "outside the Cyprus area"})
-                return
-            self._json({"stored": True, **ai_forecast.write_location(Path(self.weather_db).parent, lat, lon)})
-        except (ValueError, KeyError, TypeError) as exc:
             self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
     def _redirect(self, location: str):
