@@ -109,32 +109,61 @@
   // labels from zoom 10; below that, 55 badges on an island this size just overlap
   const LABEL_ZOOM = 10;
 
+  // ---------- map time: live, or a moment picked on the timeline under the map ----------
+  // live: the latest observations and 4 h of lightning; on the timeline: what the stations
+  // reported at that moment, the half hour of rain before it and the hour of lightning before it
+  const LIVE_TRAIL = 4 * 3600, PAST_TRAIL = 3600, STEP = 600;
+  const tl = { at: null, span: 24, end: null, history: null, bolts: null, timer: null };
+  const lastLE = (arr, x) => { let lo = 0, hi = arr.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (arr[m] <= x) { r = m; lo = m + 1; } else hi = m - 1; } return r; };
+
+  function mapState(st) {
+    if (tl.at == null) {
+      const l = st.latest;
+      return l && Date.now() / 1000 - l.ts <= STALE_S ? l : null;
+    }
+    const h = tl.history && tl.history[st.code];
+    const i = h ? lastLE(h.ts, tl.at) : -1;
+    if (i < 0 || tl.at - h.ts[i] > 1200) return null;
+    let rain = null;
+    for (let j = i; j >= 0 && h.ts[j] > tl.at - 1800; j--) if (h.rain[j] != null) rain = (rain || 0) + h.rain[j];
+    return { ts: h.ts[i], temp: h.temp[i], rh: h.rh[i], wind10: h.wind10[i], wind2: h.wind2[i], wdir: h.wdir[i],
+             rain_30m: rain == null ? null : Math.round(rain * 10) / 10 };
+  }
+
   // ---------- lightning (Meteosat-12 Lightning Imager, ten-minute windows) ----------
-  // the last hour as dots cooling from white to red; the newest window replayed as flashes
-  // with its real timing (the Data Store publishes each window ~1 min after it closes)
-  const BOLT_AGES = [[10, "#fff7c2"], [20, "#ffd23f"], [30, "#ff9f1c"], [45, "#f2542d"], [60, "#b5179e"]];
-  const boltColor = ageMin => (BOLT_AGES.find(([m]) => ageMin < m) || BOLT_AGES[BOLT_AGES.length - 1])[1];
+  // older flashes are smaller, fainter and cooler in colour; live, the newest window is
+  // replayed as flashes with its real timing (the Data Store publishes ~1 min after it closes)
+  const BOLT_COLORS = [[0.08, "#fff7c2"], [0.2, "#ffd23f"], [0.4, "#ff9f1c"], [0.7, "#f2542d"], [1.01, "#b5179e"]];
   const boltCanvas = L.canvas({ padding: 0.2 });
   const boltLayer = L.layerGroup().addTo(map);
-  let boltWindowEnd = null, boltTimers = [];
-  function boltDot(t, lat, lon) {
-    const age = (Date.now() / 1000 - t) / 60;
-    return L.circleMarker([lat, lon], { renderer: boltCanvas, radius: 2.5, weight: 0.5, color: "#3b2a00",
-                                        fillColor: boltColor(age), fillOpacity: Math.max(0.35, 1 - age / 80), interactive: false });
+  let boltLive = null, boltWindowEnd = null, boltTimers = [];
+  function boltDot(t, lat, lon, at, trail) {
+    const f = Math.min(Math.max((at - t) / trail, 0), 1);
+    return L.circleMarker([lat, lon], { renderer: boltCanvas, radius: 4.5 - 3.3 * f, weight: 0.5, color: "#3b2a00",
+      opacity: 1 - 0.8 * f, fillColor: BOLT_COLORS.find(([x]) => f < x)[1], fillOpacity: 1 - 0.85 * f, interactive: false });
+  }
+  function drawBolts(d, at, trail, skipFrom = Infinity) {
+    boltLayer.clearLayers();
+    if (!d) return 0;
+    let n = 0;
+    d.ts.forEach((t, i) => {
+      if (t > at || t < at - trail) return;
+      n++;
+      if (t < skipFrom) boltDot(t, d.lat[i], d.lon[i], at, trail).addTo(boltLayer);
+    });
+    return n;
   }
   function boltFlash(t, lat, lon) {
+    if (tl.at != null) return;  // the timeline took over meanwhile
     const icon = L.divIcon({ html: '<span class="bolt-flash"></span>', className: "", iconSize: null });
     const m = L.marker([lat, lon], { icon, interactive: false, keyboard: false, zIndexOffset: -500 }).addTo(map);
-    setTimeout(() => { map.removeLayer(m); boltDot(t, lat, lon).addTo(boltLayer); }, 1100);
+    setTimeout(() => { map.removeLayer(m); if (tl.at == null) boltDot(t, lat, lon, Date.now() / 1000, LIVE_TRAIL).addTo(boltLayer); }, 1100);
   }
   async function loadLightning() {
-    const d = await getJSON("/api/weather/lightning");
-    const w = d.window, n = d.ts.length;
-    const fresh = w && w.end > (boltWindowEnd || 0);
-    boltLayer.clearLayers();
-    // flashes of the window being replayed appear as dots only after their flash
-    const replayFrom = fresh ? w.start : Infinity;
-    d.ts.forEach((t, i) => { if (t < replayFrom) boltDot(t, d.lat[i], d.lon[i]).addTo(boltLayer); });
+    const now = Date.now() / 1000;
+    const d = await getJSON(`/api/weather/lightning?from=${Math.floor(now - LIVE_TRAIL)}`);
+    boltLive = d;
+    const w = d.window, fresh = w && w.end > (boltWindowEnd || 0);
     if (fresh) {
       boltTimers.forEach(clearTimeout);
       boltTimers = [];
@@ -143,28 +172,29 @@
         if (t >= w.start) boltTimers.push(setTimeout(() => boltFlash(t, d.lat[i], d.lon[i]), (t - w.start) * 1000));
       });
     }
-    boltLast = d;
+    // flashes of the window being replayed become dots only after their flash
+    if (tl.at == null) drawBolts(d, now, LIVE_TRAIL, fresh ? w.start : Infinity);
     boltNote();
   }
-  let boltLast = null;
   // the summary under the map; flashes off the visible part get a "show" link
   function boltNote() {
-    const d = boltLast, note = $("map-bolt");
+    const note = $("map-bolt"), live = tl.at == null;
+    const d = live ? boltLive : tl.bolts, at = live ? Date.now() / 1000 : tl.at, trail = live ? LIVE_TRAIL : PAST_TRAIL;
     if (!d || !d.window) { note.classList.add("hidden"); return; }
-    const w = d.window, n = d.ts.length, view = map.getBounds();
-    const seen = d.ts.filter((_, i) => view.contains([d.lat[i], d.lon[i]])).length;
+    const idx = d.ts.map((t, i) => i).filter(i => d.ts[i] <= at && d.ts[i] >= at - trail);
+    const view = map.getBounds(), seen = idx.filter(i => view.contains([d.lat[i], d.lon[i]])).length;
     const hm = s => new Date(s * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-    const src = `спутник Meteosat-12, данные по ${hm(w.end)}`;
+    const period = live ? "за последние 4 часа" : `за час до ${hm(at)}`;
     note.classList.remove("hidden");
-    if (!n) { note.textContent = `Молний рядом с Кипром за последний час нет · ${src}`; return; }
-    const off = n - seen;
-    note.innerHTML = `<span class="bolt-key"></span>Молнии за последний час: ${n}` +
+    if (!idx.length) { note.textContent = `Молний рядом с Кипром ${period} нет · спутник Meteosat-12${live ? `, данные по ${hm(d.window.end)}` : ""}`; return; }
+    const off = idx.length - seen;
+    note.innerHTML = `<span class="bolt-key"></span>Молнии ${period}: ${idx.length}` +
       (off ? ` (на видимой части карты ${seen}, <a href="#" id="bolt-show">показать все</a>)` : "") +
-      ` · ${src}; последние 10 минут проигрываются вспышками с задержкой ~${Math.max(1, Math.round((Date.now() / 1000 - w.start) / 60))} мин`;
+      ` · спутник Meteosat-12` + (live ? `, данные по ${hm(d.window.end)}; последние 10 минут проигрываются вспышками с задержкой ~${Math.max(1, Math.round((Date.now() / 1000 - d.window.start) / 60))} мин; старые молнии мельче и бледнее` : "");
     const link = $("bolt-show");
     if (link) link.onclick = e => {
       e.preventDefault();
-      const pts = d.ts.map((_, i) => [d.lat[i], d.lon[i]]).concat(stations.map(s => [s.lat, s.lon]));
+      const pts = idx.map(i => [d.lat[i], d.lon[i]]).concat(stations.map(s => [s.lat, s.lon]));
       map.fitBounds(pts, { padding: [12, 12], animate: false });
     };
   }
@@ -174,6 +204,54 @@
   setInterval(() => loadLightning().catch(() => {}), 60e3);
   map.on("zoomend", () => drawMarkers());
 
+  // ---------- the timeline ----------
+  const tlFmt = s => new Date(s * 1000).toLocaleString("ru-RU", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  async function tlLoad() {
+    const end = Math.floor(Date.now() / 1000 / STEP) * STEP, from = end - tl.span * 3600;
+    const [h, b] = await Promise.all([getJSON(`/api/weather/map-history?from=${from - 1800}&to=${end}`),
+                                      getJSON(`/api/weather/lightning?from=${from - PAST_TRAIL}&to=${end}`)]);
+    Object.assign(tl, { end, history: h.stations, bolts: b });
+    const r = $("tl-range");
+    r.max = tl.span * 3600 / STEP;
+    if (tl.at == null) r.value = r.max;
+  }
+  function tlApply() {
+    const r = $("tl-range"), k = +r.value, n = +r.max;
+    tl.at = k >= n ? null : tl.end - (n - k) * STEP;
+    $("tl-label").textContent = tl.at == null ? "сейчас" : tlFmt(tl.at);
+    $("tl-live").classList.toggle("hidden", tl.at == null);
+    $("timeline").classList.toggle("past", tl.at != null);
+    if (tl.at == null) drawBolts(boltLive, Date.now() / 1000, LIVE_TRAIL);
+    else drawBolts(tl.bolts, tl.at, PAST_TRAIL);
+    drawMarkers();
+    boltNote();
+  }
+  function tlStop() { clearInterval(tl.timer); tl.timer = null; $("tl-play").textContent = "▶"; }
+  $("tl-range").addEventListener("input", async () => {
+    if (!tl.history) await tlLoad().catch(fail);
+    tlApply();
+  });
+  $("tl-span").addEventListener("change", async () => {
+    tlStop();
+    tl.span = +$("tl-span").value;
+    tl.at = null;
+    await tlLoad().catch(fail);
+    tlApply();
+  });
+  $("tl-live").addEventListener("click", () => { tlStop(); $("tl-range").value = $("tl-range").max; tlApply(); });
+  $("tl-play").addEventListener("click", async () => {
+    if (tl.timer) { tlStop(); return; }
+    if (!tl.history) await tlLoad().catch(fail);
+    const r = $("tl-range");
+    if (+r.value >= +r.max) r.value = 0;  // from live: play the whole span from its start
+    $("tl-play").textContent = "❚❚";
+    tl.timer = setInterval(() => {
+      r.value = +r.value + 1;
+      tlApply();
+      if (+r.value >= +r.max) tlStop();
+    }, 350);
+  });
+
   // rain now: the last half hour's sum as mm/h, WMO intensity classes (< 2.5 / < 7.6 / more)
   const DROP = `<svg class="drop" viewBox="0 0 10 14" width="7" height="10"><path d="M5 0C5 0 0 6.5 0 9a5 5 0 0 0 10 0C10 6.5 5 0 5 0z" fill="currentColor"/></svg>`;
   function rainLevel(mm30) {
@@ -182,11 +260,11 @@
     return rate < 2.5 ? { cls: "light", name: "слабый" } : rate < 7.6 ? { cls: "moderate", name: "умеренный" } : { cls: "heavy", name: "сильный" };
   }
   function rainSummary() {
-    const now = Date.now() / 1000;
-    const raining = stations.filter(s => s.latest && now - s.latest.ts <= STALE_S && s.latest.rain_30m > 0);
+    const raining = stations.filter(s => { const l = mapState(s); return l && l.rain_30m > 0; });
+    const when = tl.at == null ? "сейчас (за последние 30 мин)" : `в ${new Date(tl.at * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })} (за 30 мин до этого)`;
     $("map-rain").classList.toggle("hidden", !raining.length);
     $("map-rain").innerHTML = raining.length
-      ? `<span class="rain-ring"></span>Дождь сейчас (за последние 30 мин): ${raining.map(s => label(s.code)).sort().join(", ")}` : "";
+      ? `<span class="rain-ring"></span>Дождь ${when}: ${raining.map(s => label(s.code)).sort().join(", ")}` : "";
   }
 
   // an arrow from the station downwind, longer for stronger wind (10 m wind + direction only)
@@ -202,15 +280,15 @@
 
   function drawMarkers() {
     rainSummary();
-    const now = Date.now() / 1000, labels = map.getZoom() >= LABEL_ZOOM;
+    const labels = map.getZoom() >= LABEL_ZOOM, live = tl.at == null;
     for (const st of stations) {
-      const t = st.latest ? st.latest.temp : null;
-      const stale = !st.latest || now - st.latest.ts > STALE_S;
-      const { bg, fg } = tempColor(stale ? null : t);
-      const rain = stale ? null : rainLevel(st.latest.rain_30m);
+      const l = mapState(st), stale = !l;
+      const t = l ? l.temp : null;
+      const { bg, fg } = tempColor(t);
+      const rain = l ? rainLevel(l.rain_30m) : null;
       const cls = `wx-badge${labels ? "" : " dot"}${st.code === selected ? " sel" : ""}${rain ? ` rain ${rain.cls}` : ""}`;
       const text = labels ? (t == null ? "–" : Math.round(t) + "°") + (rain ? DROP : "") : "";
-      const html = windArrow(stale ? null : st.latest, labels) + `<span class="${cls}" style="background:${bg};color:${fg}">${text}</span>`;
+      const html = windArrow(l, labels) + `<span class="${cls}" style="background:${bg};color:${fg}">${text}</span>`;
       const icon = L.divIcon({ html, className: "", iconSize: null });
       if (!markers[st.code]) {
         markers[st.code] = L.marker([st.lat, st.lon], { icon, keyboard: false })
@@ -218,11 +296,13 @@
       } else {
         markers[st.code].setIcon(icon);
       }
-      const l = st.latest || {};
-      const parts = [l.temp != null && `${num(l.temp, 1)} °C`, l.rh != null && `${num(l.rh, 0)}%`,
-                     (l.wind10 ?? l.wind2) != null && `ветер ${num(l.wind10 ?? l.wind2, 1)} м/с${l.wdir != null && (l.wind10 ?? 0) >= 0.3 ? ` ${windDir(l.wdir)}` : ""}`].filter(Boolean);
-      const rainLine = rain ? `<br><span style="color:${css("--rain")}">${rain.name} дождь: ${num(st.latest.rain_30m, 1)} мм за 30 мин</span>` : "";
-      markers[st.code].bindTooltip(`<b>${label(st.code)}</b><br>${parts.join(" · ") || "нет данных"}${rainLine}${stale ? "<br>⚠ данные устарели" : ""}`,
+      // live and stale: still show the last values, marked
+      const shown = l || (live ? st.latest : null) || {};
+      const parts = [shown.temp != null && `${num(shown.temp, 1)} °C`, shown.rh != null && `${num(shown.rh, 0)}%`,
+                     (shown.wind10 ?? shown.wind2) != null && `ветер ${num(shown.wind10 ?? shown.wind2, 1)} м/с${shown.wdir != null && (shown.wind10 ?? 0) >= 0.3 ? ` ${windDir(shown.wdir)}` : ""}`].filter(Boolean);
+      const rainLine = rain ? `<br><span style="color:${css("--rain")}">${rain.name} дождь: ${num(l.rain_30m, 1)} мм за 30 мин</span>` : "";
+      const whenLine = live ? (stale ? "<br>⚠ данные устарели" : "") : (stale ? "<br>нет данных на этот момент" : `<br>${tlFmt(l.ts)}`);
+      markers[st.code].bindTooltip(`<b>${label(st.code)}</b><br>${parts.join(" · ") || "нет данных"}${rainLine}${whenLine}`,
                                    { direction: "top", offset: [0, -8] });
       markers[st.code].setZIndexOffset(st.code === selected ? 1000 : 0);
     }

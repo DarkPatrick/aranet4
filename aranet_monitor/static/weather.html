@@ -16,6 +16,15 @@
   <div id="map"></div>
   <div class="note hidden" id="map-rain" style="margin:6px 0 0 4px"></div>
   <div class="note hidden" id="map-bolt" style="margin:2px 0 0 4px"></div>
+  <div class="timeline" id="timeline">
+    <button id="tl-play" title="проиграть период">▶</button>
+    <input type="range" id="tl-range" min="0" max="144" step="1" value="144" aria-label="момент на карте">
+    <span class="tl-label" id="tl-label">сейчас</span>
+    <select id="tl-span" title="сколько можно отмотать назад">
+      <option value="6">6 ч</option><option value="24" selected>24 ч</option><option value="72">3 дня</option>
+    </select>
+    <button id="tl-live" class="hidden">к текущему</button>
+  </div>
 
   <div class="panel">
     <div class="row">

@@ -357,6 +357,18 @@ def station_list(conn) -> list[dict]:
     return out
 
 
+def map_history(conn, ts_from: int, ts_to: int) -> dict:
+    """What every station reported in [from, to], for the map's timeline (columnar per station)."""
+    cols = ("ts", "temp", "rh", "rain", "wind10", "wind2", "wdir")
+    out: dict = {}
+    for r in conn.execute(f"SELECT station, {', '.join(cols)} FROM observations WHERE ts BETWEEN ? AND ? ORDER BY station, ts",
+                          (ts_from, ts_to)):
+        d = out.setdefault(r[0], {c: [] for c in cols})
+        for i, c in enumerate(cols, 1):
+            d[c].append(r[i])
+    return {"stations": out}
+
+
 def readings(conn, station: str, ts_from: int | None = None, ts_to: int | None = None) -> dict:
     sql = f"SELECT ts, {', '.join(VALUE_COLUMNS)} FROM observations WHERE station = ?"
     args: list = [station]

@@ -89,3 +89,12 @@ def test_station_list_rain_last_half_hour(conn):
         c.execute("UPDATE observations SET rain = 0.1 WHERE station = 'OWN'")
     own = {s["code"]: s for s in weather.station_list(c)}["OWN"]["latest"]
     assert own["rain_30m"] == 0.3  # the last three 10-min sums, not 0.30000000000000004
+
+
+def test_map_history_per_station(conn):
+    c, t = conn
+    h = weather.map_history(c, t - 3600, t + 3600)["stations"]
+    assert set(h) == {"OWN", "CITY", "HILL", "FAR"}
+    assert h["OWN"]["ts"] == sorted(h["OWN"]["ts"]) and len(h["OWN"]["ts"]) == 7
+    assert set(h["OWN"]) == {"ts", "temp", "rh", "rain", "wind10", "wind2", "wdir"}
+    assert weather.map_history(c, t + 7200, t + 9000) == {"stations": {}}

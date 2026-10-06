@@ -8,6 +8,7 @@ GET /api/weather/uv?station=CODE&from=T&to=T -> hourly CAMS UV index (incl. fore
 GET /api/weather/air?station=CODE&from=T&to=T -> hourly air quality: CAMS at the station + nearest DLI measurements
 GET /api/weather/air/first -> when the air-quality measurements begin
 GET /api/weather/lightning?from=T&to=T -> lightning flashes near Cyprus (Meteosat-12), default the last hour
+GET /api/weather/map-history?from=T&to=T -> every station's temp/rh/rain/wind for the map's timeline (up to 4 days)
 GET /static/<file>        -> static assets (echarts is vendored, works offline)
 GET /api/readings?hours=N -> readings for the last N hours (no param: everything)
 GET /api/readings?from=T&to=T -> readings in [from, to], unix seconds, either bound optional
@@ -76,6 +77,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._file(STATIC_DIR / "weather.html")
             elif url.path in ("/weather/outdoor/forecast", "/weather/outdoor/forecast/"):
                 self._file(STATIC_DIR / "forecast.html")
+            elif url.path == "/api/weather/map-history":
+                ts_from, ts_to = self._range(parse_qs(url.query))
+                if ts_from is None or ts_to is None or ts_to - ts_from > 4 * 86400:
+                    raise ValueError("from and to are required, at most 4 days apart")
+                self._json(self._with_weather(weather.map_history, ts_from, ts_to))
             elif url.path == "/api/weather/lightning":
                 q = parse_qs(url.query)
                 ts_from, ts_to = self._range(q)
