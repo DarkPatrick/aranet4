@@ -109,14 +109,31 @@
   const LABEL_ZOOM = 10;
   map.on("zoomend", () => drawMarkers());
 
+  // rain now: the last half hour's sum as mm/h, WMO intensity classes (< 2.5 / < 7.6 / more)
+  const DROP = `<svg class="drop" viewBox="0 0 10 14" width="7" height="10"><path d="M5 0C5 0 0 6.5 0 9a5 5 0 0 0 10 0C10 6.5 5 0 5 0z" fill="currentColor"/></svg>`;
+  function rainLevel(mm30) {
+    if (!(mm30 > 0)) return null;
+    const rate = mm30 * 2;
+    return rate < 2.5 ? { cls: "light", name: "слабый" } : rate < 7.6 ? { cls: "moderate", name: "умеренный" } : { cls: "heavy", name: "сильный" };
+  }
+  function rainSummary() {
+    const now = Date.now() / 1000;
+    const raining = stations.filter(s => s.latest && now - s.latest.ts <= STALE_S && s.latest.rain_30m > 0);
+    $("map-rain").classList.toggle("hidden", !raining.length);
+    $("map-rain").innerHTML = raining.length
+      ? `<span class="rain-ring"></span>Дождь сейчас (за последние 30 мин): ${raining.map(s => label(s.code)).sort().join(", ")}` : "";
+  }
+
   function drawMarkers() {
+    rainSummary();
     const now = Date.now() / 1000, labels = map.getZoom() >= LABEL_ZOOM;
     for (const st of stations) {
       const t = st.latest ? st.latest.temp : null;
       const stale = !st.latest || now - st.latest.ts > STALE_S;
       const { bg, fg } = tempColor(stale ? null : t);
-      const cls = `wx-badge${labels ? "" : " dot"}${st.code === selected ? " sel" : ""}`;
-      const text = labels ? (t == null ? "–" : Math.round(t) + "°") : "";
+      const rain = stale ? null : rainLevel(st.latest.rain_30m);
+      const cls = `wx-badge${labels ? "" : " dot"}${st.code === selected ? " sel" : ""}${rain ? ` rain ${rain.cls}` : ""}`;
+      const text = labels ? (t == null ? "–" : Math.round(t) + "°") + (rain ? DROP : "") : "";
       const html = `<span class="${cls}" style="background:${bg};color:${fg}">${text}</span>`;
       const icon = L.divIcon({ html, className: "", iconSize: null });
       if (!markers[st.code]) {
@@ -128,7 +145,8 @@
       const l = st.latest || {};
       const parts = [l.temp != null && `${num(l.temp, 1)} °C`, l.rh != null && `${num(l.rh, 0)}%`,
                      (l.wind10 ?? l.wind2) != null && `ветер ${num(l.wind10 ?? l.wind2, 1)} м/с`].filter(Boolean);
-      markers[st.code].bindTooltip(`<b>${label(st.code)}</b><br>${parts.join(" · ") || "нет данных"}${stale ? "<br>⚠ данные устарели" : ""}`,
+      const rainLine = rain ? `<br><span style="color:${css("--rain")}">${rain.name} дождь: ${num(st.latest.rain_30m, 1)} мм за 30 мин</span>` : "";
+      markers[st.code].bindTooltip(`<b>${label(st.code)}</b><br>${parts.join(" · ") || "нет данных"}${rainLine}${stale ? "<br>⚠ данные устарели" : ""}`,
                                    { direction: "top", offset: [0, -8] });
       markers[st.code].setZIndexOffset(st.code === selected ? 1000 : 0);
     }

@@ -122,3 +122,14 @@ label.mini select { padding: 1px 4px; font-size: 12px; max-width: 100%; min-widt
 .tiles.four { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 720px) { .tiles.four { grid-template-columns: repeat(2, 1fr); } }
 .tile-head { font-weight: 600; margin: 16px 0 -6px; }
+/* rain now: a pulsing ring around the station */
+.wx-badge.rain { position: relative; }
+.wx-badge.rain::after { content: ""; position: absolute; inset: -4px; border-radius: 12px; border: 2px solid var(--rain);
+                        animation: rain-pulse 1.8s ease-out infinite; pointer-events: none; }
+.wx-badge.dot.rain::after { border-radius: 50%; }
+.wx-badge.rain.moderate::after { border-width: 3px; animation-duration: 1.3s; }
+.wx-badge.rain.heavy::after { border-width: 4px; inset: -6px; animation-duration: .9s; }
+.wx-badge .drop { margin-left: 2px; vertical-align: -1px; color: #cfe9ff; }
+@keyframes rain-pulse { 0% { transform: scale(.85); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .wx-badge.rain::after { animation: none; opacity: .9; } }
+.rain-ring { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--rain); margin-right: 6px; vertical-align: -1px; }

@@ -81,3 +81,11 @@ def test_readings_and_station_list_carry_utci(conn):
     latest = {s["code"]: s for s in weather.station_list(c)}
     assert latest["OWN"]["latest"]["utci_sun"] > latest["OWN"]["latest"]["utci_shade"]
     assert "utci_shade" in latest["OWN"]["metrics"]
+
+
+def test_station_list_rain_last_half_hour(conn):
+    c, t = conn
+    with c:  # OWN has rows every 10 min up to t + 30 min
+        c.execute("UPDATE observations SET rain = 0.1 WHERE station = 'OWN'")
+    own = {s["code"]: s for s in weather.station_list(c)}["OWN"]["latest"]
+    assert own["rain_30m"] == 0.3  # the last three 10-min sums, not 0.30000000000000004

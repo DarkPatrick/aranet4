@@ -337,6 +337,10 @@ def station_list(conn) -> list[dict]:
             latest["net"] = net(last["temp"], last["rh"], _wind_for_net(last))
             shade, sun, src = _feels(conn, st["code"], st["lat"], st["lon"], [last])
             latest.update(utci_shade=shade[0], utci_sun=sun[0], rad_src=src)
+            # rain over the last half hour (three 10-min sums): one 10-min value flickers in drizzle
+            rain = conn.execute("SELECT SUM(rain) FROM observations WHERE station = ? AND ts > ? AND ts <= ?",
+                                (st["code"], last["ts"] - 1800, last["ts"])).fetchone()[0]
+            latest["rain_30m"] = round(rain, 1) if rain is not None else None
         has = []
         if last:
             # what the station reports: anything seen in its last week of data
