@@ -17,6 +17,7 @@ GET /api/weather/readings?station=CODE&from=T&to=T -> one station's observations
 GET /api/weather/marine   -> latest sea forecast, sea surface temperature history, current warnings
 GET /api/weather/climate/stations -> stations in the daily archive (since 2016)
 GET /api/weather/climate?station=CODE&from=T&to=T -> daily Tmax / Tmin / rain
+GET /api/weather/climate/records?station=CODE -> ERA5-Land records for today's date and hour (+ the archive's own)
 
 The series endpoints (readings, weather/readings, weather/uv, weather/air) take
 &agg=raw|hour|day|week|month|year|auto (default raw) and &stat=mean|median: local
@@ -35,7 +36,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import agg, air, db, dom, forecast, uv, weather
+from . import agg, air, db, dom, era5, forecast, uv, weather
 from .config import get_settings
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -92,6 +93,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(self._with_weather(dom.marine))
             elif url.path == "/api/weather/climate/stations":
                 self._json(self._with_weather(dom.climate_stations))
+            elif url.path == "/api/weather/climate/records":
+                station = parse_qs(url.query).get("station", [""])[0]
+                if not station:
+                    raise ValueError("station is required")
+                self._json(self._with_weather(era5.records, station))
             elif url.path == "/api/weather/climate":
                 q = parse_qs(url.query)
                 station = q.get("station", [""])[0]

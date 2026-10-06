@@ -1,0 +1,9 @@
+[Unit]
+Description=Nightly ERA5-Land records update (the first load takes two nights)
+
+[Timer]
+OnCalendar=*-*-* 02:40
+Persistent=true
+
+[Install]
+WantedBy=timers.target

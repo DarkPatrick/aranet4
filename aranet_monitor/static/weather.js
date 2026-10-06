@@ -613,6 +613,36 @@
     const c = climStations.find(x => x.code === code);
     $("clim-meta").textContent = `${c.days} дней, ${fmtDay(new Date(c.first + "T00:00:00").getTime())} – ${fmtDay(new Date(c.last + "T00:00:00").getTime())}`;
     if (reload) loadClimate().catch(fail);
+    loadRecords().catch(fail);
+  }
+
+  // ---------- records for today's date and the current hour (ERA5-Land since 1950 + the archive) ----------
+  const MONTHS_GEN = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+  const dayName = md => `${+md.slice(3)} ${MONTHS_GEN[+md.slice(0, 2) - 1]}`;
+  const atDate = s => s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)}` : "";  // "YYYY-MM-DD..." -> DD.MM.YYYY
+  let recSeq = 0;
+  async function loadRecords() {
+    const seq = ++recSeq, code = climSelected;
+    const r = await getJSON(`/api/weather/climate/records?station=${encodeURIComponent(code)}`);
+    if (seq !== recSeq) return;
+    const day = dayName(r.md), hh = `${String(r.hour).padStart(2, "0")}:00`;
+    const t = v => v == null ? "–" : `${num(v, 1)}<span class="unit">°C</span>`;
+    const tile = (lbl, value, sub) => `<div class="tile"><div class="label">${lbl}</div><div class="value">${value}</div><div class="note" style="margin:0">${sub}</div></div>`;
+    const h = r.hourly, d = r.daily, a = r.archive;
+    const arch = (v, at) => a && v != null ? `<br>архив метеослужбы: ${num(v, 1)} °C, ${atDate(at)}` : "";
+    $("clim-tiles").innerHTML = !h && !d ? "" : [
+      tile(`Мин. в ${hh}`, t(h && h.min), h ? atDate(h.min_at) : "нет данных"),
+      tile(`Макс. в ${hh}`, t(h && h.max), h ? atDate(h.max_at) : "нет данных"),
+      tile("Мин. за день", t(d && d.min), d ? `${atDate(d.min_at)}, ${d.min_at.slice(11, 16)}${arch(a && a.min, a && a.min_at)}` : "нет данных"),
+      tile("Макс. за день", t(d && d.max), d ? `${atDate(d.max_at)}, ${d.max_at.slice(11, 16)}${arch(a && a.max, a && a.max_at)}` : "нет данных"),
+    ].join("");
+    $("clim-tiles-head").classList.toggle("hidden", !h && !d);
+    $("clim-tiles-head").textContent = `Рекорды ${day}${r.period ? ` за ${r.period[0].slice(0, 4)}–${r.period[1].slice(0, 4)}` : ""}`;
+    const note = $("clim-tiles-note");
+    note.classList.remove("hidden");
+    note.textContent = r.period
+      ? `Рекорды температуры для этой даты и часа за ${r.period[0].slice(0, 4)}–${atDate(r.period[1])}: реанализ ERA5-Land (Copernicus, сетка ~9 км) в координатах станции; реанализ сглаживает пики, измеренные рекорды бывают выше на 1–3 °C. «Архив метеослужбы» — измеренный рекорд этой даты${a ? ` за ${a.period[0].slice(0, 4)}–${a.period[1].slice(0, 4)}` : ""}.`
+      : "Рекорды за 1950–сегодня ещё загружаются (реанализ ERA5-Land, первая загрузка занимает две ночи).";
   }
   $("clim-station").addEventListener("change", () => setClimStation($("clim-station").value));
 

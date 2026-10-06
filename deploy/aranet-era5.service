@@ -1,0 +1,13 @@
+[Unit]
+Description=ERA5-Land temperature records since 1950 per climate-archive station (one run)
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__DIR__
+EnvironmentFile=__DIR__/config.env
+ExecStart=__DIR__/.venv/bin/aranet-era5
+# the first load paces its requests for the free plan: a couple of hours
+TimeoutStartSec=4h

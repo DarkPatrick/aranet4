@@ -27,6 +27,7 @@ aranet-forecast = "aranet_monitor.forecast:main"
 aranet-import = "aranet_monitor.importer:main"
 aranet-uv = "aranet_monitor.uv:main"
 aranet-air = "aranet_monitor.air:main"
+aranet-era5 = "aranet_monitor.era5:main"
 
 [tool.setuptools.packages.find]
 include = ["aranet_monitor*"]
