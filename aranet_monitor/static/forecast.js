@@ -86,12 +86,15 @@
     $("ai").classList.toggle("hidden", !show);
     if (!show) return;
     const f = ai.forecast, h = f.horizons.find(x => x.hours === aiHorizon) || f.horizons[0];
+    const loc = ai.location, mine = r => r.region === "Твоё место";
+    const where = loc ? `для твоего места: ${esc(f.place || `${loc.lat.toFixed(3)}, ${loc.lon.toFixed(3)}`)} (координаты от ${new Date(loc.ts * 1000).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}) и по Кипру` : "по Кипру (место не задано — открой «Погоду на Кипре» и разреши геолокацию)";
     const ageH = (Date.now() / 1000 - ai.issued) / 3600;
     const issued = new Date(ai.issued * 1000).toLocaleString("ru-RU", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
     const pct = v => `<span class="pbar"><span style="width:${v}%"></span></span>${v}%`;
-    const rows = h.regions.map(r => `<tr><td>${esc(r.region)}</td><td>${num(r.temp_min)}…${num(r.temp_max)} °C</td>` +
+    const rows = h.regions.map(r => `<tr class="${mine(r) ? "mine" : ""}"><td>${mine(r) && f.place ? `${esc(r.region)}<div class="note" style="margin:0">${esc(f.place)}</div>` : esc(r.region)}</td><td>${num(r.temp_min)}…${num(r.temp_max)} °C</td>` +
       `<td>${pct(r.precip_chance)}</td><td>${pct(r.thunder_chance)}</td><td>${esc(r.wind)}</td><td class="note" style="margin:0">${esc(r.notes)}</td></tr>`).join("");
     $("ai").innerHTML = `
+      <div class="note" style="margin:0 0 4px">Прогноз ${where}.</div>
       <div class="note" style="margin:0 0 8px">Выпущен ${issued}${ageH > 12 ? ` · <b>устарел (${Math.round(ageH)} ч назад)</b>` : ""} · модель ${esc(ai.model)} ·
         экспериментальный прогноз языковой модели по наблюдениям 55 станций за сутки, молниям, бюллетеням метеослужбы и модели ECMWF IFS;
         официальный прогноз — выше.</div>
@@ -108,6 +111,17 @@
       <details><summary class="note" style="cursor:pointer">Где модель ECMWF ошибалась за прошедшие сутки</summary><p>${esc(f.model_vs_obs)}</p></details>`;
     document.querySelectorAll("#ai-tabs button").forEach(b => b.addEventListener("click", () => { aiHorizon = +b.dataset.h; renderAi(); }));
   }
+  // report where the viewer is, if the browser already allows it (no prompt here: that's on the map page)
+  async function sendLocation() {
+    if (!("geolocation" in navigator) || !window.isSecureContext || !navigator.permissions) return;
+    const p = await navigator.permissions.query({ name: "geolocation" });
+    if (p.state !== "granted") return;
+    navigator.geolocation.getCurrentPosition(c => fetch("/api/weather/location", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat: c.coords.latitude, lon: c.coords.longitude }) }).catch(() => {}),
+      () => {}, { timeout: 20000, maximumAge: 10 * 60e3 });
+  }
+  sendLocation().catch(() => {});
   async function loadAi() {
     ai = await (await fetch("/api/weather/ai-forecast", { cache: "no-store" })).json();
     renderAi();

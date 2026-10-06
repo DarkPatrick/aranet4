@@ -41,6 +41,9 @@ log = logging.getLogger("aranet.ai")
 
 KEY_STATIONS = ["ATHALASSA", "ASTROMERITIS", "ATHIENOU", "LCLK", "CAVO_GRECO", "FRENAROS", "ZYGI", "LIMASSOL",
                 "KOURIS", "LCPH", "KATHIKAS", "POLIS", "KPYRGOS", "PRODROMOS", "TROODOS"]
+MY_PLACE = "Твоё место"
+LOCATION_FILE = "viewer_location.json"   # next to the weather database; the dashboard writes it
+LOCATION_MAX_AGE = 3 * 86400             # an older location isn't "where you are" any more
 REGIONS = ["Никосия и центральная равнина", "Ларнака и восток", "Лимассол и южное побережье",
            "Пафос и запад", "северо-запад (Полис, Като Пиргос)", "Троодос (горы)"]
 ECMWF_VARS = ["temperature_2m", "relative_humidity_2m", "precipitation", "cloud_cover", "cape",
@@ -51,25 +54,30 @@ UA = {"User-Agent": "aranet-monitor/0.1 (+https://github.com/DarkPatrick/aranet4
 
 
 # the answer's shape; strict (every field required, nothing extra), as structured outputs want
-REGION = {"type": "object", "additionalProperties": False,
-          "required": ["region", "temp_min", "temp_max", "precip_chance", "thunder_chance", "wind", "notes"],
-          "properties": {"region": {"type": "string", "enum": REGIONS},
-                         "temp_min": {"type": "number"}, "temp_max": {"type": "number"},
-                         "precip_chance": {"type": "integer", "minimum": 0, "maximum": 100},
-                         "thunder_chance": {"type": "integer", "minimum": 0, "maximum": 100},
-                         "wind": {"type": "string"}, "notes": {"type": "string"}}}
-HORIZON = {"type": "object", "additionalProperties": False,
-           "required": ["hours", "valid_until", "overview", "confidence", "regions"],
-           "properties": {"hours": {"type": "integer", "enum": [4, 12, 24]},
-                          "valid_until": {"type": "string"}, "overview": {"type": "string"},
-                          "confidence": {"type": "string", "enum": ["низкая", "средняя", "высокая"]},
-                          "regions": {"type": "array", "items": REGION, "minItems": len(REGIONS), "maxItems": len(REGIONS)}}}
-ANSWER_SCHEMA = {"type": "object", "additionalProperties": False,
-                 "required": ["summary", "situation", "model_vs_obs", "horizons", "risks"],
-                 "properties": {"summary": {"type": "string"}, "situation": {"type": "string"},
-                                "model_vs_obs": {"type": "string"},
-                                "horizons": {"type": "array", "items": HORIZON, "minItems": 3, "maxItems": 3},
-                                "risks": {"type": "array", "items": {"type": "string"}}}}
+def make_schema(personal: bool) -> dict:
+    regions = [MY_PLACE] + REGIONS if personal else REGIONS
+    region = {"type": "object", "additionalProperties": False,
+              "required": ["region", "temp_min", "temp_max", "precip_chance", "thunder_chance", "wind", "notes"],
+              "properties": {"region": {"type": "string", "enum": regions},
+                             "temp_min": {"type": "number"}, "temp_max": {"type": "number"},
+                             "precip_chance": {"type": "integer", "minimum": 0, "maximum": 100},
+                             "thunder_chance": {"type": "integer", "minimum": 0, "maximum": 100},
+                             "wind": {"type": "string"}, "notes": {"type": "string"}}}
+    horizon = {"type": "object", "additionalProperties": False,
+               "required": ["hours", "valid_until", "overview", "confidence", "regions"],
+               "properties": {"hours": {"type": "integer", "enum": [4, 12, 24]},
+                              "valid_until": {"type": "string"}, "overview": {"type": "string"},
+                              "confidence": {"type": "string", "enum": ["низкая", "средняя", "высокая"]},
+                              "regions": {"type": "array", "items": region, "minItems": len(regions), "maxItems": len(regions)}}}
+    return {"type": "object", "additionalProperties": False,
+            "required": ["place", "summary", "situation", "model_vs_obs", "horizons", "risks"],
+            "properties": {"place": {"type": "string"}, "summary": {"type": "string"}, "situation": {"type": "string"},
+                           "model_vs_obs": {"type": "string"},
+                           "horizons": {"type": "array", "items": horizon, "minItems": 3, "maxItems": 3},
+                           "risks": {"type": "array", "items": {"type": "string"}}}}
+
+
+ANSWER_SCHEMA = make_schema(False)
 
 INSTRUCTIONS = f"""Ты — синоптик, который готовит прогноз погоды для Кипра. Отвечай по-русски.
 Ниже все данные, которые есть: наблюдения 55 автоматических станций метеослужбы Кипра за последние 24 часа,
@@ -87,8 +95,20 @@ INSTRUCTIONS = f"""Ты — синоптик, который готовит пр
 - confidence — насколько уверен; если данные противоречат друг другу, скажи об этом в overview.
 - situation — коротко синоптическая ситуация (что происходит и почему), summary — 1–2 предложения для человека.
 - risks — заметные риски (грозы, ливни, сильный ветер, жара, туман), пустой список, если их нет.
+- place — пустая строка (место пользователя не задано).
 Не запускай никаких команд и не ищи ничего вне этого сообщения: всё нужное — ниже.
 Время везде местное (Кипр, Asia/Nicosia).
+"""
+
+PERSONAL = f"""
+ВАЖНО: прогноз читает человек, который сейчас находится в точке из раздела «Место пользователя».
+- summary, situation и overview каждого горизонта начинай с того, что ждёт именно в этой точке
+  (температура, дождь, гроза, ветер по часам, когда что начнётся), и только потом — общее по Кипру.
+- В regions первой строкой дай «{MY_PLACE}»: прогноз для этой точки (вероятности — для самой точки, а не для района,
+  поэтому обычно ниже районных), затем шесть районов как обычно.
+- Учти высоту и удалённость от моря точки по ближайшим станциям и ECMWF для неё (строки МОЁ_МЕСТО), поправленный
+  на ошибки модели, которые ты видишь на соседних станциях.
+- place — короткое название места по-русски (город или посёлок рядом, например «Лимассол, Гермасойя»).
 """
 
 
@@ -97,6 +117,7 @@ class DbSource:
 
     def __init__(self, weather_db: str, lightning_db: str):
         from . import db
+        self.weather_db = weather_db
         self.conn = db.connect_readonly(weather_db, empty=dom.connect)
         self.lconn = db.connect_readonly(lightning_db, empty=lambda p: sqlite3.connect(p)) if Path(lightning_db).exists() else None
 
@@ -118,6 +139,9 @@ class DbSource:
 
     def marine(self):
         return dom.marine(self.conn)
+
+    def location(self):
+        return read_location(Path(self.weather_db).parent)
 
 
 class ApiSource:
@@ -145,6 +169,39 @@ class ApiSource:
     def marine(self):
         return self._get("/api/weather/marine")
 
+    def location(self):
+        return self._get("/api/weather/location")
+
+
+def read_location(directory) -> dict | None:
+    """The viewer's last location the dashboard got from a browser: {lat, lon, ts}, if recent."""
+    try:
+        loc = json.loads((Path(directory) / LOCATION_FILE).read_text())
+    except (OSError, ValueError):
+        return None
+    return loc if time.time() - loc.get("ts", 0) <= LOCATION_MAX_AGE else None
+
+
+def write_location(directory, lat: float, lon: float) -> dict:
+    loc = {"lat": round(float(lat), 4), "lon": round(float(lon), 4), "ts": int(time.time())}
+    p = Path(directory) / LOCATION_FILE
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(loc))
+    tmp.chmod(0o644)
+    os.replace(tmp, p)
+    return loc
+
+
+def _km(lat1, lon1, lat2, lon2) -> float:
+    import math
+    r = math.pi / 180
+    a = math.sin((lat2 - lat1) * r / 2) ** 2 + math.cos(lat1 * r) * math.cos(lat2 * r) * math.sin((lon2 - lon1) * r / 2) ** 2
+    return 12742 * math.asin(math.sqrt(a))
+
+
+def nearest_stations(src, lat, lon, n=4) -> list[tuple[str, float]]:
+    return sorted(((c, _km(lat, lon, la, lo)) for c, la, lo in src.stations()), key=lambda x: x[1])[:n]
+
 
 def _local(ts: float) -> str:
     return datetime.fromtimestamp(ts, weather.LOCAL_TZ).strftime("%d.%m %H:%M")
@@ -154,8 +211,8 @@ def _fmt(v, n=1):
     return "" if v is None else round(v, n)
 
 
-def observations_csv(src, now: int) -> str:
-    """Key stations hourly, the rest every 3 h, over the last 24 h."""
+def observations_csv(src, now: int, hourly=frozenset(KEY_STATIONS)) -> str:
+    """Key stations (and those nearest the viewer) hourly, the rest every 3 h, over the last 24 h."""
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["station", "time", "t_C", "rh_%", "rain_mm", "wind_ms", "gust_ms", "dir_deg", "p_msl_hPa", "rad_Wm2"])
@@ -168,7 +225,7 @@ def observations_csv(src, now: int) -> str:
                 "p_msl": d["p_msl"], "rad": d["rad_global"]}
         h = agg.aggregate(cols, "hour", sums={"rain"}, circular={"wdir"})
         gust = agg.aggregate({"ts": d["ts"], "wind": wind}, "hour", maxes={"wind"})["wind"]
-        if code in KEY_STATIONS:
+        if code in hourly:
             rows = list(zip(h["ts"], h["temp"], h["rh"], h["rain"], h["wind"], gust, h["wdir"], h["p_msl"], h["rad"]))
         else:  # three-hour steps from the hourly values
             rows = []
@@ -199,10 +256,14 @@ def lightning_csv(src, now: int) -> str:
     return "hour_start,lat,lon,flashes\n" + "\n".join(f"{_local(h)},{la},{lo},{n}" for (h, la, lo), n in sorted(cells.items()))
 
 
-def ecmwf_csv(src) -> str:
-    """ECMWF IFS at the key stations: the past 24 h every 3 h, the next 24 h hourly."""
+def ecmwf_csv(src, place=None) -> str:
+    """ECMWF IFS at the key stations (and the viewer's place, as МОЁ_МЕСТО): the past 24 h every 3 h,
+    the next 24 h hourly."""
     st = {c: (la, lo) for c, la, lo in src.stations()}
     codes = [c for c in KEY_STATIONS if c in st]
+    if place:
+        st["МОЁ_МЕСТО"] = (place["lat"], place["lon"])
+        codes = ["МОЁ_МЕСТО"] + codes
     params = {"latitude": ",".join(f"{st[c][0]:.4f}" for c in codes),
               "longitude": ",".join(f"{st[c][1]:.4f}" for c in codes),
               "models": "ecmwf_ifs", "hourly": ",".join(ECMWF_VARS), "past_days": 1, "forecast_days": 2,
@@ -248,27 +309,33 @@ def warnings_text(src) -> str:
     return "\n".join(lines) or "действующих предупреждений нет"
 
 
-def build_prompt(src, now: int | None = None) -> str:
+def build_prompt(src, now: int | None = None, place=None) -> str:
+    """`place`: the viewer's {lat, lon, ts} (the forecast then leads with it), or None."""
     now = int(now or time.time())
     meta = "\n".join(f"{c},{la:.3f},{lo:.3f}" for c, la, lo in src.stations())
-    sections = [
-        INSTRUCTIONS,
-        f"Время выпуска прогноза: {_local(now)}.",
+    near = nearest_stations(src, place["lat"], place["lon"]) if place else []
+    hourly = frozenset(KEY_STATIONS) | {c for c, _ in near}
+    sections = [INSTRUCTIONS + (PERSONAL if place else ""), f"Время выпуска прогноза: {_local(now)}."]
+    if place:
+        sections.append(f"## Место пользователя\nКоординаты {place['lat']:.4f}, {place['lon']:.4f} (получены {_local(place['ts'])}). "
+                        "Ближайшие станции (их наблюдения ниже — по часам): "
+                        + ", ".join(f"{c} {km:.1f} км" for c, km in near) + ". Прогноз ECMWF для самой точки — строки МОЁ_МЕСТО.")
+    sections += [
         f"## Станции (код, широта, долгота); ключевые: {', '.join(KEY_STATIONS)}\n{meta}",
-        f"## Наблюдения за 24 часа (ключевые станции по часам, остальные с шагом 3 часа)\n{observations_csv(src, now)}",
+        f"## Наблюдения за 24 часа (ключевые станции и ближайшие к пользователю — по часам, остальные с шагом 3 часа)\n{observations_csv(src, now, hourly)}",
         f"## Молнии за 24 часа (вспышек в час по ячейкам 0,5°)\n{lightning_csv(src, now)}",
-        f"## ECMWF IFS для ключевых станций (прошлые сутки с шагом 3 ч, затем 24 ч вперёд по часам; wmo_code — код погоды WMO)\n{ecmwf_csv(src)}",
+        f"## ECMWF IFS для ключевых станций{' и точки пользователя' if place else ''} (прошлые сутки с шагом 3 ч, затем 24 ч вперёд по часам; wmo_code — код погоды WMO)\n{ecmwf_csv(src, place)}",
         f"## Бюллетени метеослужбы Кипра\n{bulletins_text(src)}",
         f"## Предупреждения и море\n{warnings_text(src)}",
     ]
     return "\n\n".join(sections)
 
 
-def ask(prompt: str, cmd: str) -> tuple[dict, float]:
+def ask(prompt: str, cmd: str, schema_doc: dict = ANSWER_SCHEMA) -> tuple[dict, float]:
     """Run the CLI in an empty directory (no project files to wander into); JSON answer -> dict."""
     with tempfile.TemporaryDirectory() as tmp:
         schema, out = Path(tmp) / "schema.json", Path(tmp) / "answer.json"
-        schema.write_text(json.dumps(ANSWER_SCHEMA, ensure_ascii=False))
+        schema.write_text(json.dumps(schema_doc, ensure_ascii=False))
         args = shlex.split(cmd)
         if args and Path(args[0]).name == "codex":
             args += ["-C", tmp, "--output-schema", str(schema), "-o", str(out), "-"]
@@ -282,11 +349,12 @@ def ask(prompt: str, cmd: str) -> tuple[dict, float]:
     return json.loads(text[start:end + 1]), took
 
 
-def save(ai_dir: str, issued: int, model: str, answer: dict, prompt_chars: int, seconds: float) -> Path:
+def save(ai_dir: str, issued: int, model: str, answer: dict, prompt_chars: int, seconds: float, place=None) -> Path:
     """<issued>.json plus latest.json (replaced atomically), readable by the dashboard's user."""
     d = Path(ai_dir)
     d.mkdir(parents=True, exist_ok=True)
-    doc = {"issued": issued, "model": model, "seconds": round(seconds, 1), "prompt_chars": prompt_chars, "forecast": answer}
+    doc = {"issued": issued, "model": model, "seconds": round(seconds, 1), "prompt_chars": prompt_chars,
+           "location": place, "forecast": answer}
     body = json.dumps(doc, ensure_ascii=False)
     path = d / f"{issued}.json"
     path.write_text(body)
@@ -317,15 +385,19 @@ def main(argv=None) -> int:
     s = get_settings(args.config)
     src = ApiSource(args.api) if args.api else DbSource(s.weather_db, s.lightning_db)
     now = int(time.time())
-    prompt = build_prompt(src, now)
+    try:
+        place = src.location()
+    except (OSError, ValueError):
+        place = None
+    prompt = build_prompt(src, now, place)
     if args.dry_run:
         print(prompt)
         return 0
     cmd = args.cmd or os.environ.get("ARANET_AI_CMD") or DEFAULT_CMD
     log.info("prompt: %d chars; asking %s", len(prompt), shlex.split(cmd)[0])
-    answer, took = ask(prompt, cmd)
+    answer, took = ask(prompt, cmd, make_schema(bool(place)))
     model = next((a for a in shlex.split(cmd) if a.startswith("gpt") or a.startswith("claude")), shlex.split(cmd)[0])
-    path = save(args.out or s.ai_dir, now, model, answer, len(prompt), took)
+    path = save(args.out or s.ai_dir, now, model, answer, len(prompt), took, place)
     print(json.dumps(answer, ensure_ascii=False, indent=2))
     log.info("saved %s", path)
     log.info("done in %.0f s", took)

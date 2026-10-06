@@ -159,3 +159,5 @@ table.cmp.ai td:nth-child(5) { min-width: 160px; } table.cmp.ai td:nth-child(6) 
 .pbar span { display: block; height: 100%; background: var(--rain); }
 .ai-risks { margin: 0 0 8px 18px; padding: 0; }
 b.good { color: var(--good); } b.warn { color: var(--warn); } b.bad { color: var(--bad); }
+table.cmp.ai tr.mine td { background: var(--head); font-weight: 600; }
+table.cmp.ai tr.mine td .note { font-weight: 400; }
