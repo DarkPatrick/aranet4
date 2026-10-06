@@ -32,6 +32,7 @@ python3 -m venv "$DIR/.venv"
 cat > "$DIR/config.env" <<CFG
 ARANET_DB=$DATA/aranet.db
 ARANET_WEATHER_DB=$WEATHER/weather.db
+ARANET_LIGHTNING_DB=$DATA/lightning.db
 ARANET_HOST=127.0.0.1
 ARANET_PORT=$APP_PORT
 CFG

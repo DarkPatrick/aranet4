@@ -11,6 +11,7 @@ requires-python = ">=3.10"
 dependencies = [
     "aranet4>=2.4",
     "pdfplumber>=0.11",
+    "h5py>=3.10",  # lightning: the satellite's NetCDF-4 files
 ]
 
 [project.optional-dependencies]
@@ -28,6 +29,7 @@ aranet-import = "aranet_monitor.importer:main"
 aranet-uv = "aranet_monitor.uv:main"
 aranet-air = "aranet_monitor.air:main"
 aranet-era5 = "aranet_monitor.era5:main"
+aranet-lightning = "aranet_monitor.lightning:main"
 
 [tool.setuptools.packages.find]
 include = ["aranet_monitor*"]

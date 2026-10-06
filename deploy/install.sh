@@ -30,12 +30,19 @@ if [ ! -f config.env ]; then
 fi
 
 echo "==> systemd units"
-for unit in aranet-collector.service aranet-collector.timer aranet-dashboard.service aranet-weather.service aranet-weather.timer aranet-dom-forecast.service aranet-dom-forecast.timer aranet-dom-climate.service aranet-dom-climate.timer aranet-forecast.service aranet-forecast.timer aranet-uv.service aranet-uv.timer aranet-air.service aranet-air.timer aranet-era5.service aranet-era5.timer; do
+for unit in aranet-collector.service aranet-collector.timer aranet-dashboard.service aranet-weather.service aranet-weather.timer aranet-dom-forecast.service aranet-dom-forecast.timer aranet-dom-climate.service aranet-dom-climate.timer aranet-forecast.service aranet-forecast.timer aranet-uv.service aranet-uv.timer aranet-air.service aranet-air.timer aranet-era5.service aranet-era5.timer aranet-lightning.service aranet-lightning.timer; do
   sed -e "s|__DIR__|$DIR|g" -e "s|__USER__|$USER_NAME|g" "deploy/$unit" | sudo tee "/etc/systemd/system/$unit" >/dev/null
 done
 sudo systemctl daemon-reload
 sudo systemctl enable --now aranet-dashboard.service aranet-weather.timer aranet-dom-forecast.timer aranet-dom-climate.timer aranet-forecast.timer aranet-uv.timer aranet-air.timer aranet-era5.timer
 sudo systemctl restart aranet-dashboard.service  # pick up code updates on re-runs
+# lightning needs a (free) EUMETSAT account; EUMETSAT doesn't answer the server, so it runs here
+if grep -q '^EUMETSAT_KEY=..' config.env; then
+  sudo systemctl enable --now aranet-lightning.timer
+  echo "==> lightning timer enabled"
+else
+  echo "!! lightning off: put EUMETSAT_KEY / EUMETSAT_SECRET (https://api.eumetsat.int/api-key/) into config.env and re-run"
+fi
 if grep -q '^ARANET_ADDRESS=..' config.env; then
   sudo systemctl enable --now aranet-collector.timer
   echo "==> collector timer enabled"

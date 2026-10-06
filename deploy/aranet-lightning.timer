@@ -1,0 +1,9 @@
+[Unit]
+Description=Lightning: look for a new ten-minute window every 2 minutes
+
+[Timer]
+OnCalendar=*:0/2:30
+Persistent=false
+
+[Install]
+WantedBy=timers.target

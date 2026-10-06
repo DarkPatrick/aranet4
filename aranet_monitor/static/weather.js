@@ -108,6 +108,70 @@
 
   // labels from zoom 10; below that, 55 badges on an island this size just overlap
   const LABEL_ZOOM = 10;
+
+  // ---------- lightning (Meteosat-12 Lightning Imager, ten-minute windows) ----------
+  // the last hour as dots cooling from white to red; the newest window replayed as flashes
+  // with its real timing (the Data Store publishes each window ~1 min after it closes)
+  const BOLT_AGES = [[10, "#fff7c2"], [20, "#ffd23f"], [30, "#ff9f1c"], [45, "#f2542d"], [60, "#b5179e"]];
+  const boltColor = ageMin => (BOLT_AGES.find(([m]) => ageMin < m) || BOLT_AGES[BOLT_AGES.length - 1])[1];
+  const boltCanvas = L.canvas({ padding: 0.2 });
+  const boltLayer = L.layerGroup().addTo(map);
+  let boltWindowEnd = null, boltTimers = [];
+  function boltDot(t, lat, lon) {
+    const age = (Date.now() / 1000 - t) / 60;
+    return L.circleMarker([lat, lon], { renderer: boltCanvas, radius: 2.5, weight: 0.5, color: "#3b2a00",
+                                        fillColor: boltColor(age), fillOpacity: Math.max(0.35, 1 - age / 80), interactive: false });
+  }
+  function boltFlash(t, lat, lon) {
+    const icon = L.divIcon({ html: '<span class="bolt-flash"></span>', className: "", iconSize: null });
+    const m = L.marker([lat, lon], { icon, interactive: false, keyboard: false, zIndexOffset: -500 }).addTo(map);
+    setTimeout(() => { map.removeLayer(m); boltDot(t, lat, lon).addTo(boltLayer); }, 1100);
+  }
+  async function loadLightning() {
+    const d = await getJSON("/api/weather/lightning");
+    const w = d.window, n = d.ts.length;
+    const fresh = w && w.end > (boltWindowEnd || 0);
+    boltLayer.clearLayers();
+    // flashes of the window being replayed appear as dots only after their flash
+    const replayFrom = fresh ? w.start : Infinity;
+    d.ts.forEach((t, i) => { if (t < replayFrom) boltDot(t, d.lat[i], d.lon[i]).addTo(boltLayer); });
+    if (fresh) {
+      boltTimers.forEach(clearTimeout);
+      boltTimers = [];
+      boltWindowEnd = w.end;
+      d.ts.forEach((t, i) => {
+        if (t >= w.start) boltTimers.push(setTimeout(() => boltFlash(t, d.lat[i], d.lon[i]), (t - w.start) * 1000));
+      });
+    }
+    boltLast = d;
+    boltNote();
+  }
+  let boltLast = null;
+  // the summary under the map; flashes off the visible part get a "show" link
+  function boltNote() {
+    const d = boltLast, note = $("map-bolt");
+    if (!d || !d.window) { note.classList.add("hidden"); return; }
+    const w = d.window, n = d.ts.length, view = map.getBounds();
+    const seen = d.ts.filter((_, i) => view.contains([d.lat[i], d.lon[i]])).length;
+    const hm = s => new Date(s * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    const src = `спутник Meteosat-12, данные по ${hm(w.end)}`;
+    note.classList.remove("hidden");
+    if (!n) { note.textContent = `Молний рядом с Кипром за последний час нет · ${src}`; return; }
+    const off = n - seen;
+    note.innerHTML = `<span class="bolt-key"></span>Молнии за последний час: ${n}` +
+      (off ? ` (на видимой части карты ${seen}, <a href="#" id="bolt-show">показать все</a>)` : "") +
+      ` · ${src}; последние 10 минут проигрываются вспышками с задержкой ~${Math.max(1, Math.round((Date.now() / 1000 - w.start) / 60))} мин`;
+    const link = $("bolt-show");
+    if (link) link.onclick = e => {
+      e.preventDefault();
+      const pts = d.ts.map((_, i) => [d.lat[i], d.lon[i]]).concat(stations.map(s => [s.lat, s.lon]));
+      map.fitBounds(pts, { padding: [12, 12], animate: false });
+    };
+  }
+  map.on("moveend", boltNote);
+  // started after the whole script has run (getJSON is defined further down)
+  setTimeout(() => loadLightning().catch(() => {}), 0);
+  setInterval(() => loadLightning().catch(() => {}), 60e3);
   map.on("zoomend", () => drawMarkers());
 
   // rain now: the last half hour's sum as mm/h, WMO intensity classes (< 2.5 / < 7.6 / more)

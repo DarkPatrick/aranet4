@@ -1,0 +1,12 @@
+[Unit]
+Description=Lightning flashes near Cyprus from Meteosat-12 (EUMETSAT Data Store), pushed to the server (one run)
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__DIR__
+EnvironmentFile=__DIR__/config.env
+ExecStart=__DIR__/.venv/bin/aranet-lightning
+TimeoutStartSec=600
