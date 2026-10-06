@@ -100,3 +100,33 @@ def test_api_lightning(tmp_path):
         srv2.shutdown()
     finally:
         srv.shutdown()
+
+
+def test_known_windows_are_not_fetched_again(tmp_path, monkeypatch):
+    path = str(tmp_path / "l.db")
+    w1 = {"id": "A", "start": datetime.fromtimestamp(T0, timezone.utc), "end": datetime.fromtimestamp(T0 + 600, timezone.utc), "url": "u1"}
+    w2 = {"id": "B", "start": datetime.fromtimestamp(T0 + 600, timezone.utc), "end": datetime.fromtimestamp(T0 + 1200, timezone.utc), "url": "u2"}
+    fetched = []
+    # like the Data Store: everything overlapping `since`, the last stored window included
+    monkeypatch.setattr(lightning, "search", lambda since: [p for p in (w1, w2) if p["end"] > since])
+    monkeypatch.setattr(lightning, "token", lambda k, s: "tok")
+    monkeypatch.setattr(lightning, "download", lambda url, bearer: fetched.append(url) or zipped(make_nc(FLASHES)))
+    monkeypatch.setattr(lightning, "CATCH_UP", lightning.timedelta(days=36500))
+    assert lightning.collect(path, "k", "s") == 2
+    assert lightning.collect(path, "k", "s") == 0 and fetched == ["u1", "u2"]
+
+
+def test_push_retries_when_the_server_is_busy(monkeypatch):
+    import subprocess
+    from aranet_monitor import sync
+    calls = []
+
+    def run(args, check):
+        calls.append(args)
+        if len(calls) < 3:
+            raise subprocess.CalledProcessError(12, args)
+
+    monkeypatch.setattr(sync.subprocess, "run", run)
+    monkeypatch.setattr(sync.time, "sleep", lambda s: None)
+    sync.push("db", "aranet@example.org:aranet.db", "key")
+    assert len(calls) == 3

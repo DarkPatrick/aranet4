@@ -168,7 +168,9 @@ def collect(path: str, key: str, secret: str) -> int:
         since = (datetime.fromtimestamp(last, timezone.utc) + timedelta(seconds=1) if last
                  else datetime.now(timezone.utc) - CATCH_UP)
         since = max(since, datetime.now(timezone.utc) - CATCH_UP)
-        products = search(since)
+        # the search returns every window overlapping `since`, the last one stored included
+        known = {r[0] for r in conn.execute("SELECT product FROM lightning_files WHERE end >= ?", (int(since.timestamp()) - 3600,))}
+        products = [p for p in search(since) if p["id"] not in known and (last is None or p["start"].timestamp() > last)]
         if not products:
             return 0
         bearer = token(key, secret)

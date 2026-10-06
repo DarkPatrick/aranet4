@@ -1,8 +1,8 @@
 [Unit]
-Description=Lightning: look for a new ten-minute window every 2 minutes
+Description=Lightning: look for a new ten-minute window every 2 minutes (odd minutes, clear of the sensor's :x0 run)
 
 [Timer]
-OnCalendar=*:0/2:30
+OnCalendar=*:1/2:50
 Persistent=false
 
 [Install]

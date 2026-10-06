@@ -11,6 +11,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from .config import get_settings
@@ -32,9 +33,19 @@ def snapshot(src: str, dst: str) -> None:
     os.replace(tmp, dst)
 
 
-def push(path: str, target: str, key: str) -> None:
+def push(path: str, target: str, key: str, retries: int = 3, wait: float = 8) -> None:
+    """The server's rrsync takes one transfer at a time per directory: the sensor's and the
+    lightning pushes can meet, so a refused one waits a little and tries again."""
     ssh = f"ssh -i {key} -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
-    subprocess.run(["rsync", "-t", "--timeout=60", "-e", ssh, path, target], check=True)
+    for attempt in range(retries + 1):
+        try:
+            subprocess.run(["rsync", "-t", "--timeout=60", "-e", ssh, path, target], check=True)
+            return
+        except subprocess.CalledProcessError:
+            if attempt == retries:
+                raise
+            log.warning("push to %s refused (attempt %d), retrying in %.0f s", target, attempt + 1, wait)
+            time.sleep(wait)
 
 
 def main(argv=None) -> int:

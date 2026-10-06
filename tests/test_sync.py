@@ -40,4 +40,5 @@ def test_main_reports_push_failure(monkeypatch, conn, db_path, tmp_path):
         raise sync.subprocess.CalledProcessError(12, cmd)
 
     monkeypatch.setattr(sync.subprocess, "run", boom)
+    monkeypatch.setattr(sync.time, "sleep", lambda s: None)  # the retries
     assert sync.main(["--config", str(cfg)]) == 1
