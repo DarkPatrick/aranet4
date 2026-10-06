@@ -77,7 +77,43 @@
     }
   }
 
+  // ---------- the LLM's own forecast (aranet-ai-forecast) ----------
+  let ai = null, aiHorizon = 4;
+  const CONF_CLASS = { "низкая": "bad", "средняя": "warn", "высокая": "good" };
+  function renderAi() {
+    const show = !!(ai && ai.forecast);
+    $("ai-h").classList.toggle("hidden", !show);
+    $("ai").classList.toggle("hidden", !show);
+    if (!show) return;
+    const f = ai.forecast, h = f.horizons.find(x => x.hours === aiHorizon) || f.horizons[0];
+    const ageH = (Date.now() / 1000 - ai.issued) / 3600;
+    const issued = new Date(ai.issued * 1000).toLocaleString("ru-RU", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const pct = v => `<span class="pbar"><span style="width:${v}%"></span></span>${v}%`;
+    const rows = h.regions.map(r => `<tr><td>${esc(r.region)}</td><td>${num(r.temp_min)}…${num(r.temp_max)} °C</td>` +
+      `<td>${pct(r.precip_chance)}</td><td>${pct(r.thunder_chance)}</td><td>${esc(r.wind)}</td><td class="note" style="margin:0">${esc(r.notes)}</td></tr>`).join("");
+    $("ai").innerHTML = `
+      <div class="note" style="margin:0 0 8px">Выпущен ${issued}${ageH > 12 ? ` · <b>устарел (${Math.round(ageH)} ч назад)</b>` : ""} · модель ${esc(ai.model)} ·
+        экспериментальный прогноз языковой модели по наблюдениям 55 станций за сутки, молниям, бюллетеням метеослужбы и модели ECMWF IFS;
+        официальный прогноз — выше.</div>
+      <p class="synopsis">${esc(f.summary)}</p>
+      <p>${esc(f.situation)}</p>
+      <div class="row" style="margin:8px 0">
+        <div class="quick" id="ai-tabs">${f.horizons.map(x => `<button data-h="${x.hours}" class="${x.hours === h.hours ? "active" : ""}">${x.hours} ч</button>`).join("")}</div>
+        <span class="note" style="margin:0">до ${esc(h.valid_until)} · уверенность: <b class="${CONF_CLASS[h.confidence] || ""}">${esc(h.confidence)}</b></span>
+      </div>
+      <p>${esc(h.overview)}</p>
+      <div class="scroll"><table class="cmp ai"><tr><th>Район</th><th>Температура</th><th>Осадки</th><th>Гроза</th><th>Ветер</th><th>Заметки</th></tr>${rows}</table></div>
+      ${f.risks.length ? `<div class="tag" style="margin:10px 0 4px">Риски</div><ul class="ai-risks">${f.risks.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
+      <details><summary class="note" style="cursor:pointer">Где модель ECMWF ошибалась за прошедшие сутки</summary><p>${esc(f.model_vs_obs)}</p></details>`;
+    document.querySelectorAll("#ai-tabs button").forEach(b => b.addEventListener("click", () => { aiHorizon = +b.dataset.h; renderAi(); }));
+  }
+  async function loadAi() {
+    ai = await (await fetch("/api/weather/ai-forecast", { cache: "no-store" })).json();
+    renderAi();
+  }
+
   async function load() {
+    loadAi().catch(() => {});
     try {
       data = await (await fetch("/api/weather/forecast", { cache: "no-store" })).json();
     } catch (e) { $("meta").textContent = "ошибка загрузки: " + e.message; return; }

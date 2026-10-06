@@ -151,3 +151,11 @@ label.mini select { padding: 1px 4px; font-size: 12px; max-width: 100%; min-widt
 .timeline.past .tl-label { color: var(--warn); }
 #tl-play { width: 36px; }
 @media (max-width: 600px) { .timeline { flex-wrap: wrap; } .timeline input[type=range] { order: 5; flex-basis: 100%; } .timeline .tl-label { min-width: 0; flex: 1; } }
+/* the LLM forecast table */
+table.cmp.ai th, table.cmp.ai td { text-align: left; white-space: normal; vertical-align: top; }
+table.cmp.ai td:nth-child(2), table.cmp.ai td:nth-child(3), table.cmp.ai td:nth-child(4) { white-space: nowrap; }
+table.cmp.ai td:nth-child(5) { min-width: 160px; } table.cmp.ai td:nth-child(6) { min-width: 200px; }
+.pbar { display: inline-block; width: 46px; height: 6px; border-radius: 3px; background: var(--grid); margin-right: 6px; vertical-align: 1px; overflow: hidden; }
+.pbar span { display: block; height: 100%; background: var(--rain); }
+.ai-risks { margin: 0 0 8px 18px; padding: 0; }
+b.good { color: var(--good); } b.warn { color: var(--warn); } b.bad { color: var(--bad); }

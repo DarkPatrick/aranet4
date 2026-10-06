@@ -1,0 +1,9 @@
+[Unit]
+Description=LLM forecast ~40 min after each weather-service bulletin (05:00, 11:00, 16:00) and late evening
+
+[Timer]
+OnCalendar=*-*-* 05,11,16,22:40 Asia/Nicosia
+Persistent=true
+
+[Install]
+WantedBy=timers.target

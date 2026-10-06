@@ -1,0 +1,12 @@
+[Unit]
+Description=LLM forecast for 4/12/24 h from the dashboard's data (one run)
+After=network-online.target aranet-dashboard.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# the user whose Codex (or other CLI) login is used; it reads through the dashboard's API
+User=__USER__
+WorkingDirectory=/tmp
+ExecStart=__DIR__/.venv/bin/aranet-ai-forecast --config /nonexistent --api http://127.0.0.1:8091 --out /var/lib/aranet-ai
+TimeoutStartSec=30min
