@@ -30,6 +30,7 @@ aranet-uv = "aranet_monitor.uv:main"
 aranet-air = "aranet_monitor.air:main"
 aranet-era5 = "aranet_monitor.era5:main"
 aranet-lightning = "aranet_monitor.lightning:main"
+aranet-ai-forecast = "aranet_monitor.ai_forecast:main"
 
 [tool.setuptools.packages.find]
 include = ["aranet_monitor*"]
