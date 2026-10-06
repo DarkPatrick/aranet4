@@ -134,12 +134,26 @@
   // older flashes are smaller, fainter and cooler in colour; live, the newest window is
   // replayed as flashes with its real timing (the Data Store publishes ~1 min after it closes)
   const BOLT_COLORS = [[0.08, "#fff7c2"], [0.2, "#ffd23f"], [0.4, "#ff9f1c"], [0.7, "#f2542d"], [1.01, "#b5179e"]];
+  // a lightning-bolt glyph on the canvas renderer (fast with thousands of flashes): a circle
+  // marker that draws a zigzag instead of a circle, `radius` setting its half-height
+  const BOLT_SHAPE = [[0.2, -1], [-0.5, 0.15], [-0.02, 0.15], [-0.22, 1], [0.5, -0.18], [0.05, -0.18]];
+  L.Canvas.include({
+    _updateBolt(layer) {
+      if (!this._drawing || layer._empty()) return;
+      const p = layer._point, r = layer._radius, ctx = this._ctx;
+      ctx.beginPath();
+      BOLT_SHAPE.forEach(([x, y], i) => ctx[i ? "lineTo" : "moveTo"](p.x + x * r, p.y + y * r));
+      ctx.closePath();
+      this._fillStroke(ctx, layer);
+    },
+  });
+  const BoltMarker = L.CircleMarker.extend({ _updatePath() { this._renderer._updateBolt(this); } });
   const boltCanvas = L.canvas({ padding: 0.2 });
   const boltLayer = L.layerGroup().addTo(map);
   let boltLive = null, boltWindowEnd = null, boltTimers = [];
   function boltDot(t, lat, lon, at, trail) {
     const f = Math.min(Math.max((at - t) / trail, 0), 1);
-    return L.circleMarker([lat, lon], { renderer: boltCanvas, radius: 4.5 - 3.3 * f, weight: 0.5, color: "#3b2a00",
+    return new BoltMarker([lat, lon], { renderer: boltCanvas, radius: 8 - 5 * f, weight: 0.8, color: "#3b2a00", lineJoin: "round",
       opacity: 1 - 0.8 * f, fillColor: BOLT_COLORS.find(([x]) => f < x)[1], fillOpacity: 1 - 0.85 * f, interactive: false });
   }
   function drawBolts(d, at, trail, skipFrom = Infinity) {

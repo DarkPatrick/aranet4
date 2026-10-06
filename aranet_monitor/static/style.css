@@ -140,7 +140,8 @@ label.mini select { padding: 1px 4px; font-size: 12px; max-width: 100%; min-widt
               animation: bolt 1.1s ease-out forwards; }
 @keyframes bolt { 0% { transform: scale(.2); opacity: 1; } 15% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(2); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .bolt-flash { animation-duration: .01s; } }
-.bolt-key { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #ffd23f; border: 1px solid #3b2a00; margin-right: 6px; vertical-align: -1px; }
+.bolt-key { display: inline-block; width: 8px; height: 12px; margin-right: 6px; vertical-align: -2px; background: #ffd23f;
+            clip-path: polygon(60% 0, 15% 57%, 49% 57%, 39% 100%, 85% 41%, 52% 41%); }
 /* the map's timeline */
 .timeline { display: flex; align-items: center; gap: 10px; margin: 8px 0 12px; padding: 8px 12px; background: var(--card);
             border: 1px solid var(--border); border-radius: 10px; }
