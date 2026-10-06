@@ -10,6 +10,10 @@ model cell may already account for part of the height). Each run fetches
 yesterday..+3 days for every station in one or two requests and overwrites what it
 had: past hours settle, forecast hours get refreshed.
 
+The same run stores the hourly global radiation of the weather model (Open-Meteo
+forecast API, best-match model) at each station: "feels like in the sun" falls back
+to it where no station nearby measures radiation.
+
     aranet-uv                  # timer: hourly
 """
 
@@ -29,6 +33,7 @@ from .config import get_settings
 log = logging.getLogger("aranet.uv")
 
 API = "https://air-quality-api.open-meteo.com/v1/air-quality"
+FORECAST_API = "https://api.open-meteo.com/v1/forecast"
 UA = {"User-Agent": "aranet-monitor/0.1 (+https://github.com/DarkPatrick/aranet4)"}
 CHUNK = 30  # stations per request, keeps the URL short
 ALT_GAIN = 0.08  # UV increase per 1000 m of altitude
@@ -38,6 +43,13 @@ CREATE TABLE IF NOT EXISTS uv_station (
     station   TEXT PRIMARY KEY,
     elevation REAL                -- metres, Open-Meteo terrain model at the station
 );
+
+CREATE TABLE IF NOT EXISTS rad_model (
+    station TEXT NOT NULL,
+    ts      INTEGER NOT NULL,   -- END of the hour the mean is over, unix seconds
+    ghi     REAL,               -- global horizontal radiation, W/m2, mean of that hour
+    PRIMARY KEY (station, ts)
+) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS uv (
     station  TEXT NOT NULL,
@@ -82,6 +94,28 @@ def fetch(stations: list[tuple], past_days: int = 1, forecast_days: int = 3) -> 
     return rows
 
 
+def fetch_radiation(stations: list[tuple], past_days: int = 2, forecast_days: int = 1) -> list[tuple]:
+    """[(code, lat, lon)] -> [(code, ts, ghi)]; Open-Meteo stamps a "preceding hour" mean at the hour's end."""
+    params = {
+        "latitude": ",".join(f"{lat:.4f}" for _, lat, _ in stations),
+        "longitude": ",".join(f"{lon:.4f}" for _, _, lon in stations),
+        "hourly": "shortwave_radiation", "past_days": past_days, "forecast_days": forecast_days,
+        "timezone": "GMT", "timeformat": "unixtime",
+    }
+    req = urllib.request.Request(FORECAST_API + "?" + urllib.parse.urlencode(params), headers=UA)
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        data = json.loads(resp.read())
+    if isinstance(data, dict):
+        if data.get("error"):
+            raise ValueError(data.get("reason"))
+        data = [data]
+    out = []
+    for (code, _, _), loc in zip(stations, data):
+        h = loc.get("hourly", {})
+        out += [(code, int(t), g) for t, g in zip(h.get("time", []), h.get("shortwave_radiation", [])) if g is not None]
+    return out
+
+
 def store(conn, rows: list[dict]) -> int:
     values = [r for r in rows if "ts" in r]
     with conn:
@@ -102,6 +136,13 @@ def collect(db_path: str) -> int:
         n = 0
         for i in range(0, len(stations), CHUNK):
             n += store(conn, fetch(stations[i:i + CHUNK]))
+        try:  # radiation is a bonus: don't lose the UV run over it
+            for i in range(0, len(stations), CHUNK):
+                with conn:
+                    conn.executemany("INSERT OR REPLACE INTO rad_model (station, ts, ghi) VALUES (?, ?, ?)",
+                                     fetch_radiation(stations[i:i + CHUNK]))
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+            log.warning("model radiation: %s", exc)
         log.info("%d stations, %d hourly UV values stored", len(stations), n)
         return n
     finally:

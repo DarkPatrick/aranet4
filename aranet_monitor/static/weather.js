@@ -1,5 +1,5 @@
 (() => {
-  const { sunPosition, sunTimes, sunPhase, sunBands, sunLegend, compass, uvLabel, uvBands, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, zoomOptions, armZoom, resetZoom, SPARSE, DAY, css, $, store, fmtTime, fmtDay, fmtRange, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
+  const { utciLabel, utciBands, sunPosition, sunTimes, sunPhase, sunBands, sunLegend, compass, uvLabel, uvBands, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, zoomOptions, armZoom, resetZoom, SPARSE, DAY, css, $, store, fmtTime, fmtDay, fmtRange, num, dot, toMs, nearest, typicalStep, Periods, SeriesChart, linkCharts, renderCompareTable } = UI;
   const REFRESH_MS = 5 * 60 * 1000;
   const STALE_S = 3600;
   const prefs = store("weather");
@@ -26,7 +26,9 @@
 
   const METRICS = [
     { key: "temp", el: "c-temp", title: "Температура, °C", unit: "°C", digits: 1, color: "--temp", rows: ["mean", "min", "max"] },
-    { key: "net", el: "c-net", title: "Ощущается (NET), °C", unit: "°C", digits: 1, color: "--feel", rows: ["mean", "min", "max"] },
+    { key: "utci_shade", el: "c-net", title: "Ощущается (UTCI), °C", unit: "°C", digits: 1, color: "--feel", rows: ["mean", "min", "max"],
+      extra: { key: "utci_sun", label: "на солнце", dash: "dashed", color: "--sun" }, notes: [{ key: "net", label: "NET метеослужбы" }],
+      bands: utciBands(), describe: v => utciLabel(v) },
     { key: "rh", el: "c-rh", title: "Влажность, %", unit: "%", digits: 0, color: "--hum", rows: ["mean", "min", "max"] },
     { key: "rain", el: "c-rain", title: "Осадки, мм", unit: "мм", digits: 1, color: "--rain", bar: true,
       rows: ["sum", { label: "макс. за 10 мин", get: s => s.max }] },
@@ -140,11 +142,18 @@
   }
   $("station").addEventListener("change", () => select($("station").value));
 
+  // where the radiation behind "in the sun" comes from
+  const radNote = src => !src ? "нет данных" : src.kind === "own" ? "датчик станции"
+    : src.kind === "near" ? `станция ${label(src.station)}, ${num(src.km, 0)} км` : "модель Open-Meteo";
+
   function setTilesFor(st) {
     const l = st.latest || {};
     const w = pick(WIND, st.metrics), p = pick(PRES, st.metrics);
     const tiles = [
-      ["Температура", l.temp, 1, "°C"], ["Ощущается", l.net, 1, "°C"], ["Влажность", l.rh, 0, "%"], ["Осадки за 10 мин", l.rain, 1, "мм"],
+      ["Температура", l.temp, 1, "°C"],
+      ["Ощущается в тени", l.utci_shade, 1, "°C", l.utci_shade != null ? utciLabel(l.utci_shade) : ""],
+      ["Ощущается на солнце", l.utci_sun, 1, "°C", l.utci_sun == null ? "" : l.utci_sun === l.utci_shade && sunPosition(l.ts * 1000, st.lat, st.lon).elevation <= 0
+        ? "солнце за горизонтом" : `${utciLabel(l.utci_sun)} · радиация: ${radNote(l.rad_src)}`], ["Влажность", l.rh, 0, "%"], ["Осадки за 10 мин", l.rain, 1, "мм"],
       w && [w[1], l[w[0]], 1, "м/с", l[w[0]] != null ? BEAUFORT.find(b => l[w[0]] < b.to).name : ""], p && [p[1], l[p[0]], 1, "hPa"], ["Радиация", l.rad_global, 0, "W/m²"], ["Снег", l.snow, 0, "см"],
     ].filter(x => x && x[1] != null);
     $("tiles").innerHTML = tiles.map(([n, v, d, u, sub]) =>
@@ -259,6 +268,7 @@
     const has = m => m.key === "wind" ? !!w : m.key === "pres" ? !!p : st.metrics.includes(m.key);
     METRICS.forEach((m, i) => {
       if (m.key === "wind" && w) m.title = `${w[1]}, м/с`;
+      if (m.key === "utci_shade") m.subtitle = `пунктир — на солнце (радиация: ${radNote(dataB.rad_src)}) · NET метеослужбы — в подсказке`;
       if (m.key === "pres" && p) {
         m.title = `${p[1]}, гПа`;
         // the "normal / cyclone / anticyclone" scale only makes sense for sea-level pressure;

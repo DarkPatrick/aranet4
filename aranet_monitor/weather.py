@@ -9,8 +9,10 @@ Run once per 10 minutes (systemd timer): aranet-weather
 """
 
 import argparse
+import bisect
 import json
 import logging
+import math
 import sqlite3
 import sys
 import time
@@ -21,6 +23,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from . import thermal
 from .config import get_settings
 
 log = logging.getLogger("aranet.weather")
@@ -208,6 +211,120 @@ def net(temp, rh, wind):
 def _wind_for_net(row) -> float | None:
     return row["wind10"] if row["wind10"] is not None else row["wind2"]
 
+
+def _wind10(row) -> float | None:
+    """UTCI wants wind at 10 m: a 2 m reading scaled by the log profile (z0 = 1 cm), x1.30."""
+    if row["wind10"] is not None:
+        return row["wind10"]
+    return row["wind2"] * 1.30 if row["wind2"] is not None else None
+
+
+# ---------- solar radiation for "feels like in the sun" ----------
+# Global radiation is measured at ~14 stations. A station without a sensor borrows a
+# neighbour's within NEAR_KM and NEAR_DH metres of height (clouds over the mountains
+# differ from the coast), else the hourly model (Open-Meteo, aranet-uv collects it).
+NEAR_KM, NEAR_DH = 15.0, 350.0
+NEAR_SMOOTH = 15 * 60  # a neighbour's values averaged over +-15 min: cloud shadows don't line up
+
+
+def _km(lat1, lon1, lat2, lon2) -> float:
+    p = math.pi / 180
+    a = math.sin((lat2 - lat1) * p / 2) ** 2 + math.cos(lat1 * p) * math.cos(lat2 * p) * math.sin((lon2 - lon1) * p / 2) ** 2
+    return 12742 * math.asin(math.sqrt(a))
+
+
+_SITES: dict = {}  # db file -> (when, stations, sensors, elevations): the station list asks 55 times
+
+
+def _sites(conn):
+    key = conn.execute("PRAGMA database_list").fetchone()[2]
+    hit = _SITES.get(key)
+    if hit and time.time() - hit[0] < 600:
+        return hit[1:]
+    st = {r[0]: (r[1], r[2]) for r in conn.execute("SELECT code, lat, lon FROM stations")}
+    sensors = {r[0] for r in conn.execute(
+        "SELECT DISTINCT station FROM observations WHERE ts > ? AND rad_global IS NOT NULL", (int(time.time()) - 7 * 86400,))}
+    try:
+        elev = dict(conn.execute("SELECT station, elevation FROM uv_station").fetchall())
+    except sqlite3.OperationalError:
+        elev = {}
+    _SITES[key] = (time.time(), st, sensors, elev)
+    return st, sensors, elev
+
+
+def radiation_source(conn, station: str) -> dict:
+    """{"kind": "own" | "near" | "model", "station", "km"}"""
+    st, sensors, elev = _sites(conn)
+    if station in sensors or station not in st:
+        return {"kind": "own" if station in sensors else "model", "station": station, "km": 0}
+    best = None
+    for s in sensors:
+        if s not in st:
+            continue
+        km = _km(*st[station], *st[s])
+        dh = abs(elev[station] - elev[s]) if station in elev and s in elev else None
+        if km <= NEAR_KM and (dh is None and km <= 10 or dh is not None and dh <= NEAR_DH):
+            if best is None or km < best[0]:
+                best = (km, s)
+    if best:
+        return {"kind": "near", "station": best[1], "km": round(best[0], 1)}
+    return {"kind": "model", "station": station, "km": 0}
+
+
+def radiation_series(conn, src: dict, ts: list[int]) -> list[float | None]:
+    """Global horizontal radiation, W/m2, at each of `ts` from the given source."""
+    if not ts:
+        return []
+    lo, hi = ts[0] - 3600, ts[-1] + 3600
+    if src["kind"] in ("own", "near"):
+        rows = conn.execute("SELECT ts, rad_global FROM observations WHERE station = ? AND ts BETWEEN ? AND ? "
+                            "AND rad_global IS NOT NULL ORDER BY ts", (src["station"], lo, hi)).fetchall()
+        times, vals = [r[0] for r in rows], [r[1] for r in rows]
+        if src["kind"] == "own":
+            exact = dict(zip(times, vals))
+            return [exact.get(t) for t in ts]
+        out = []
+        for t in ts:  # mean over the window around t
+            i, j = bisect.bisect_left(times, t - NEAR_SMOOTH), bisect.bisect_right(times, t + NEAR_SMOOTH)
+            out.append(round(sum(vals[i:j]) / (j - i), 1) if j > i else None)
+        return out
+    try:  # hourly means stamped at the hour's end: interpolate between the hours' middles
+        rows = conn.execute("SELECT ts - 1800, ghi FROM rad_model WHERE station = ? AND ts BETWEEN ? AND ? "
+                            "AND ghi IS NOT NULL ORDER BY ts", (src["station"], lo, hi + 3600)).fetchall()
+    except sqlite3.OperationalError:
+        return [None] * len(ts)
+    times, vals = [r[0] for r in rows], [r[1] for r in rows]
+    out = []
+    for t in ts:
+        i = bisect.bisect_left(times, t)
+        if i < len(times) and times[i] == t:
+            out.append(vals[i])
+        elif 0 < i < len(times) and times[i] - times[i - 1] <= 2 * 3600:
+            f = (t - times[i - 1]) / (times[i] - times[i - 1])
+            out.append(round(vals[i - 1] + f * (vals[i] - vals[i - 1]), 1))
+        else:
+            out.append(None)
+    return out
+
+
+def _feels(conn, code, lat, lon, rows) -> tuple[list, list, dict]:
+    """UTCI in the shade and in the sun for observation rows (with ts, temp, rh, wind)."""
+    src = radiation_source(conn, code)
+    ts = [r["ts"] for r in rows]
+    ghi = radiation_series(conn, src, ts)
+    if src["kind"] == "own":  # the station's own gaps: fall back to the model for those
+        missing = [i for i, g in enumerate(ghi) if g is None]
+        if missing:
+            model = radiation_series(conn, {"kind": "model", "station": code}, [ts[i] for i in missing])
+            for i, g in zip(missing, model):
+                ghi[i] = g
+    shade, sun = [], []
+    for r, g in zip(rows, ghi):
+        a, b = thermal.feels(r["temp"], r["rh"], _wind10(r), g, lat, lon, r["ts"])
+        shade.append(a)
+        sun.append(b)
+    return shade, sun, src
+
 def station_list(conn) -> list[dict]:
     """Stations with their latest observation and which columns they ever reported."""
     out = []
@@ -218,6 +335,8 @@ def station_list(conn) -> list[dict]:
         latest = {k: last[k] for k in ("ts", *VALUE_COLUMNS)} if last else None
         if latest:
             latest["net"] = net(last["temp"], last["rh"], _wind_for_net(last))
+            shade, sun, src = _feels(conn, st["code"], st["lat"], st["lon"], [last])
+            latest.update(utci_shade=shade[0], utci_sun=sun[0], rad_src=src)
         has = []
         if last:
             # what the station reports: anything seen in its last week of data
@@ -228,7 +347,7 @@ def station_list(conn) -> list[dict]:
             ).fetchone()
             has = [c for c in VALUE_COLUMNS if counts[c]]
             if counts["temp"] and counts["rh"] and (counts["wind10"] or counts["wind2"]):
-                has.append("net")
+                has += ["net", "utci_shade"]
         first = conn.execute("SELECT MIN(ts) FROM observations WHERE station = ?", (st["code"],)).fetchone()[0]
         out.append({"code": st["code"], "lat": st["lat"], "lon": st["lon"], "first": first, "latest": latest, "metrics": has})
     return out
@@ -246,6 +365,11 @@ def readings(conn, station: str, ts_from: int | None = None, ts_to: int | None =
     rows = conn.execute(sql + " ORDER BY ts", args).fetchall()
     out = {c: [r[c] for r in rows] for c in ("ts", *VALUE_COLUMNS)}
     out["net"] = [net(r["temp"], r["rh"], _wind_for_net(r)) for r in rows]
+    st = conn.execute("SELECT lat, lon FROM stations WHERE code = ?", (station,)).fetchone()
+    if st:
+        out["utci_shade"], out["utci_sun"], out["rad_src"] = _feels(conn, station, st["lat"], st["lon"], rows)
+    else:
+        out["utci_shade"], out["utci_sun"], out["rad_src"] = [None] * len(rows), [None] * len(rows), None
     return out
 
 

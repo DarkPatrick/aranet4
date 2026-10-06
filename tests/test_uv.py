@@ -25,6 +25,7 @@ def test_collect_and_read(tmp_path, monkeypatch):
                 for t, u, c in zip(loc["hourly"]["time"], loc["hourly"]["uv_index"], loc["hourly"]["uv_index_clear_sky"])]
 
     monkeypatch.setattr(uv, "fetch", fake_fetch)
+    monkeypatch.setattr(uv, "fetch_radiation", lambda stations: [(s[0], 3600, 100.0) for s in stations])
     assert uv.collect(path) == 6
     assert uv.collect(path) == 6  # refresh overwrites, no duplicates
     assert calls == [["A", "B"], ["A", "B"]]

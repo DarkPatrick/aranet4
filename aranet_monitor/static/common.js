@@ -320,6 +320,18 @@ window.UI = (() => {
   ];
   const pressureLabel = seaHpa => PRESSURE_SCALE.find(([to]) => seaHpa < to)[2];
   // bands in display units for a sensor that reads `offset` hPa below sea level
+  // UTCI heat-stress categories (upper bounds, degC), tinted cold blue .. hot red
+  const UTCI_SCALE = [
+    [-40, "экстремальный холодовой стресс", "rgba(40,70,200,.20)"], [-27, "очень сильный холодовой", "rgba(40,80,210,.16)"],
+    [-13, "сильный холодовой", "rgba(50,100,220,.12)"], [0, "умеренный холодовой", "rgba(60,120,220,.09)"],
+    [9, "слабый холодовой", "rgba(80,160,230,.06)"], [26, "нет теплового стресса", null],
+    [32, "умеренный тепловой", "rgba(255,170,0,.10)"], [38, "сильный тепловой", "rgba(255,120,0,.13)"],
+    [46, "очень сильный тепловой", "rgba(230,60,30,.15)"], [Infinity, "экстремальный тепловой", "rgba(180,20,20,.18)"],
+  ];
+  const utciLabel = v => { const s = UTCI_SCALE.find(([to]) => v < to)[1]; return s.includes("стресс") ? s : s + " стресс"; };
+  const utciBands = () => UTCI_SCALE.map(([to, label, color], i) =>
+    ({ from: i ? UTCI_SCALE[i - 1][0] : -Infinity, to, label, color: color || "transparent" }));
+
   function pressureBands(offset = 0, factor = 1) {
     return PRESSURE_SCALE.map(([to, name], i) => ({  // short name: it has to fit the right margin
       from: ((i ? PRESSURE_SCALE[i - 1][0] : -Infinity) - offset) * factor,
@@ -528,6 +540,11 @@ window.UI = (() => {
         const x = nearest(this.sets.b, m.extra.key, t, gap);
         if (x && x.v != null) html += `<div style="color:${css("--muted")};margin-left:16px">${m.extra.label}: <b>${num(x.v, m.digits)}</b>${m.describe ? " · " + m.describe(x.v) : ""}</div>`;
       }
+      // reference values that aren't drawn (e.g. the official NET next to UTCI)
+      for (const n of m.notes || []) {
+        const x = nearest(this.sets.b, n.key, t, gap);
+        if (x && x.v != null) html += `<div style="color:${css("--muted")};margin-left:16px">${n.label}: ${num(x.v, m.digits)} ${m.unit}</div>`;
+      }
       if (a && b && a.v != null && b.v != null) {
         const d = b.v - a.v;
         const pct = a.v ? ` (${signed(100 * d / Math.abs(a.v), 1)}%)` : "";
@@ -686,6 +703,6 @@ window.UI = (() => {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => charts.forEach(c => c.applyTheme()));
   }
 
-  return { sunPosition, sunTimes, sunPhase, sunBands, sunLegend, compass, uvLabel, uvBands, humidex, humidexLabel, humidexBands, pmv, comfort, pmvAt, pmvLabel, pmvBands, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, tendency, zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
+  return { utciLabel, utciBands, sunPosition, sunTimes, sunPhase, sunBands, sunLegend, compass, uvLabel, uvBands, humidex, humidexLabel, humidexBands, pmv, comfort, pmvAt, pmvLabel, pmvBands, breakGaps, gapLimit, HPA_TO_MM, pressureLabel, pressureBands, tendency, zoomOptions, armZoom, resetZoom, HOUR, DAY, MONTH, SPARSE, css, $, store, toInput, fmtTime, fmtDay, fmtRange, num, signed, dot,
            Periods, toMs, nearest, typicalStep, stats, renderCompareTable, SeriesChart, linkCharts };
 })();
