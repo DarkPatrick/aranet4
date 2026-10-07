@@ -560,10 +560,12 @@ window.UI = (() => {
     }
 
     applyTheme() {
-      const m = this.m, color = css(m.color), type = m.bar ? "bar" : "line";
+      // m.scatter: dots, no lines (wind direction: a line would jump across 360/0)
+      const m = this.m, color = css(m.color), type = m.bar ? "bar" : m.scatter ? "scatter" : "line";
       const series = (name, c, extra) => Object.assign({ name, type, data: [] },
         m.bar ? { itemStyle: { color: c }, barMaxWidth: 14, barGap: "-60%" }
-              : { showSymbol: false, sampling: "lttb", lineStyle: { width: 2, color: c }, itemStyle: { color: c } }, extra);
+          : m.scatter ? { symbolSize: 4, itemStyle: { color: c, opacity: 0.8 } }
+          : { showSymbol: false, sampling: "lttb", lineStyle: { width: 2, color: c }, itemStyle: { color: c } }, extra);
       const opt = {
         animation: false,
         ...this.titleOption(),
@@ -625,11 +627,11 @@ window.UI = (() => {
       const pts = s => {
         if (!s) return [];
         const raw = s.ts.map((t, i) => [t, s[this.m.key][i]]);
-        return this.m.bar ? raw : breakGaps(raw, gapLimit(this.step));
+        return this.m.bar || this.m.scatter ? raw : breakGaps(raw, gapLimit(this.step));
       };
       // a line through one or two points draws nothing: show the points while data is sparse
       const sparse = s => !this.m.bar && s && s.ts.length < SPARSE;
-      const series = s => ({ data: pts(s), ...(this.m.bar ? {} : { showSymbol: !!sparse(s), symbolSize: 5 }) });
+      const series = s => ({ data: pts(s), ...(this.m.bar || this.m.scatter ? {} : { showSymbol: !!sparse(s), symbolSize: 5 }) });
       const upd = { xAxis: { min: this.range[0], max: this.range[1] }, series: [series(this.sets.b), series(this.sets.a)] };
       if (this.m.axis) upd.yAxis = this.m.axis(this.sets);
       this.bandNames = null;

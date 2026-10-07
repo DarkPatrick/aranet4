@@ -33,8 +33,13 @@
     { key: "rain", el: "c-rain", title: "Осадки, мм", unit: "мм", digits: 1, color: "--rain", bar: true,
       rows: ["sum", { label: "макс. за 10 мин", get: s => s.max }] },
     { key: "wind", el: "c-wind", title: "Ветер, м/с", unit: "м/с", digits: 1, color: "--wind", zeroBased: true, rows: ["mean", "max"],
-      bands: BEAUFORT, describe: beaufort, arrows: { key: "wdir" },
+      bands: BEAUFORT, describe: beaufort,
       notes: [{ key: "wdir", label: "направление", fmt: d => `${windName(d)} (${Math.round(d)}°)` }] },
+    // direction as dots on a compass axis: a line would jump across north, arrows pile up on long periods
+    { key: "wdir", el: "c-wdir", title: "Направление ветра (откуда дует)", unit: "°", digits: 0, color: "--wind", scatter: true,
+      rows: [], describe: d => windName(d),
+      axis: () => ({ min: 0, max: 360, interval: 90, scale: false,
+                     axisLabel: { formatter: v => ({ 0: "С", 90: "В", 180: "Ю", 270: "З", 360: "С" })[v] ?? "" } }) },
     { key: "pres", el: "c-pres", title: "Давление, гПа", unit: "гПа", digits: 1, color: "--pres", rows: ["mean", "min", "max"] },
     { key: "rad_global", el: "c-rad", title: "Солнечная радиация, W/m²", unit: "W/m²", digits: 0, color: "--rad", zeroBased: true, rows: ["mean", "max"] },
     { key: "snow", el: "c-snow", title: "Снег, см", unit: "см", digits: 0, color: "--hum", zeroBased: true, rows: ["mean", "max"] },
@@ -292,6 +297,11 @@
       `<path d="${path}" stroke="var(--text)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   }
 
+  // wind arrows on the map are opt-in: 36 of them make the island hard to read
+  let showWind = prefs.get("mapWind", false);
+  $("map-wind").checked = showWind;
+  $("map-wind").addEventListener("change", () => { showWind = $("map-wind").checked; prefs.set("mapWind", showWind); drawMarkers(); });
+
   function drawMarkers() {
     rainSummary();
     const labels = map.getZoom() >= LABEL_ZOOM, live = tl.at == null;
@@ -302,7 +312,7 @@
       const rain = l ? rainLevel(l.rain_30m) : null;
       const cls = `wx-badge${labels ? "" : " dot"}${st.code === selected ? " sel" : ""}${rain ? ` rain ${rain.cls}` : ""}`;
       const text = labels ? (t == null ? "–" : Math.round(t) + "°") + (rain ? DROP : "") : "";
-      const html = windArrow(l, labels) + `<span class="${cls}" style="background:${bg};color:${fg}">${text}</span>`;
+      const html = (showWind ? windArrow(l, labels) : "") + `<span class="${cls}" style="background:${bg};color:${fg}">${text}</span>`;
       const icon = L.divIcon({ html, className: "", iconSize: null });
       if (!markers[st.code]) {
         markers[st.code] = L.marker([st.lat, st.lon], { icon, keyboard: false })
@@ -429,6 +439,8 @@
   function derive(data, st) {
     const w = pick(WIND, st.metrics), p = pick(PRES, st.metrics);
     data.wind = w ? data[w[0]] : [];
+    // direction in a calm says nothing: no dot below 0.3 m/s (the 10 m wind it comes with)
+    if (data.wdir) data.wdir = data.wdir.map((d, i) => (data.wind10 && data.wind10[i] != null && data.wind10[i] >= 0.3) ? d : null);
     data.pres = p ? data[p[0]] : [];
     return data;
   }
@@ -456,7 +468,7 @@
     const w = pick(WIND, st.metrics), p = pick(PRES, st.metrics);
     const has = m => m.key === "wind" ? !!w : m.key === "pres" ? !!p : st.metrics.includes(m.key);
     METRICS.forEach((m, i) => {
-      if (m.key === "wind" && w) { m.title = `${w[1]}, м/с`; m.subtitle = st.metrics.includes("wdir") ? "стрелки вверху — куда дует ветер" : ""; }
+      if (m.key === "wind" && w) m.title = `${w[1]}, м/с`;
       if (m.key === "utci_shade") m.subtitle = `пунктир — на солнце (радиация: ${radNote(dataB.rad_src)}) · NET метеослужбы — в подсказке`;
       if (m.key === "pres" && p) {
         m.title = `${p[1]}, гПа`;
@@ -471,7 +483,7 @@
     });
 
     $("cmp-panel").classList.toggle("hidden", !a);
-    if (a) renderCompareTable($("cmp-table"), METRICS.filter(has), dataB, dataA);
+    if (a) renderCompareTable($("cmp-table"), METRICS.filter(m => has(m) && !m.scatter), dataB, dataA);
 
     home.sets = { home: toMs(homeB), out: setB };
     renderHome(b);
