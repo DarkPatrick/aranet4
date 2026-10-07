@@ -115,3 +115,38 @@ def test_pressure_offset(tmp_path):
     weather.store(wx, [("A", 35, 33), ("B", 35, 33), ("C", 35, 33)], rows)
     wx.close()
     assert dashboard.pressure_offset(a_path, w_path) == {"offset": 4.5, "stations": 2}
+
+
+def test_static_links_versioned_and_cached(tmp_path):
+    import re
+    import threading
+    import urllib.error
+    import urllib.request
+    from aranet_monitor import dashboard
+    srv = dashboard.make_server("127.0.0.1", 0, str(tmp_path / "a.db"), str(tmp_path / "w.db"))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        page = urllib.request.urlopen(base + "/weather/outdoor")
+        html = page.read().decode()
+        links = re.findall(r'/static/[\w.-]+\.(?:js|css)\?v=\w+', html)
+        assert any("weather.js?v=" in l for l in links) and any("echarts.min.js?v=" in l for l in links)
+        js = urllib.request.urlopen(base + links[0])
+        assert "immutable" in js.headers["Cache-Control"]
+        # unversioned: revalidated, and an unchanged file answers 304
+        plain = urllib.request.urlopen(base + "/static/common.js")
+        assert plain.headers["Cache-Control"] == "no-cache"
+        req = urllib.request.Request(base + "/static/common.js", headers={"If-None-Match": plain.headers["ETag"]})
+        try:
+            urllib.request.urlopen(req)
+            assert False, "expected 304"
+        except urllib.error.HTTPError as e:
+            assert e.code == 304
+        again = urllib.request.Request(base + "/weather/outdoor", headers={"If-None-Match": page.headers["ETag"]})
+        try:
+            urllib.request.urlopen(again)
+            assert False, "expected 304"
+        except urllib.error.HTTPError as e:
+            assert e.code == 304
+    finally:
+        srv.shutdown()

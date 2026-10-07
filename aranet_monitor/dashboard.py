@@ -28,9 +28,11 @@ calendar buckets, see agg.py; the answer says which "agg" was used.
 """
 
 import argparse
+import hashlib
 import json
 import logging
 import mimetypes
+import re
 import sys
 import time
 from functools import partial
@@ -43,6 +45,13 @@ from . import agg, ai_forecast, air, db, dom, era5, forecast, lightning, uv, wea
 from .config import get_settings
 
 STATIC_DIR = Path(__file__).parent / "static"
+STATIC_LINK = re.compile(r'/static/([\w.-]+\.(?:js|css))(?=["\'])')
+
+
+def static_version(path: Path) -> str:
+    """Changes whenever the file does (mtime and size): goes into the links and the ETag."""
+    st = path.stat()
+    return hashlib.sha1(f"{path.name}:{st.st_mtime_ns}:{st.st_size}".encode()).hexdigest()[:10]
 # old addresses keep working
 REDIRECTS = {"/": "/weather/home", "/index.html": "/weather/home", "/weather": "/weather/outdoor",
              "/weather/": "/weather/outdoor", "/weather.html": "/weather/outdoor"}
@@ -69,7 +78,7 @@ class Handler(BaseHTTPRequestHandler):
             elif url.path in ("/weather/home", "/weather/home/"):
                 self._file(STATIC_DIR / "index.html")
             elif url.path.startswith("/static/"):
-                self._static(url.path[len("/static/"):])
+                self._static(url.path[len("/static/"):], url.query)
             elif url.path == "/api/readings":
                 self._readings(parse_qs(url.query))
             elif url.path == "/api/latest":
@@ -187,20 +196,35 @@ class Handler(BaseHTTPRequestHandler):
         cols = {c: [r[c] for r in rows] for c in ("ts", "co2", "temperature", "humidity", "pressure")}
         self._json(agg.aggregate(cols, *self._agg(query)))
 
-    def _static(self, name: str):
+    def _static(self, name: str, query: str = ""):
         path = (STATIC_DIR / name).resolve()
         if STATIC_DIR.resolve() not in path.parents or not path.is_file():
             self.send_error(HTTPStatus.NOT_FOUND)
             return
-        self._file(path)
+        # the pages link /static/x?v=<version> (see _file): such a URL never changes content,
+        # so the browser keeps it for good and a deploy just changes the link
+        self._file(path, immutable="v=" in query)
 
-    def _file(self, path: Path):
-        body = path.read_bytes()
+    def _file(self, path: Path, immutable: bool = False):
         ctype = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        body = path.read_bytes()
+        if path.suffix == ".html":
+            # version the static links so they can be cached forever; the page's own ETag then
+            # follows its content, links included, so a deploy reaches it
+            body = STATIC_LINK.sub(lambda m: f"{m.group(0)}?v={static_version(STATIC_DIR / m.group(1))}", body.decode()).encode()
+            etag = f'"{hashlib.sha1(body).hexdigest()[:10]}"'
+        else:
+            etag = f'"{static_version(path)}"'
+        if not immutable and self.headers.get("If-None-Match") == etag:
+            self.send_response(HTTPStatus.NOT_MODIFIED)
+            self.send_header("ETag", etag)
+            self.end_headers()
+            return
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", ctype + ("; charset=utf-8" if ctype.startswith("text/") or ctype.endswith("javascript") else ""))
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "max-age=3600" if path.name.endswith(".min.js") else "no-cache")
+        self.send_header("ETag", etag)
+        self.send_header("Cache-Control", "public, max-age=31536000, immutable" if immutable else "no-cache")
         self.end_headers()
         self.wfile.write(body)
 
