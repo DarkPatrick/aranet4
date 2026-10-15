@@ -17,6 +17,15 @@ $APT install -y -qq pi-bluetooth 2>/dev/null || true
 sudo systemctl enable --now bluetooth
 # makes time-sync.target wait for an actual NTP sync (collector units order after it)
 sudo systemctl enable systemd-time-wait-sync.service
+# network-online.target (the units order after it) is a no-op until a wait-online service is
+# enabled; Ubuntu Server ships it disabled, so right after boot the runs failed on DNS.
+# eth0 and wlan0 are both optional in netplan: one routable link is enough, 60 s at most.
+if systemctl is-enabled --quiet systemd-networkd.service 2>/dev/null; then
+  sudo mkdir -p /etc/systemd/system/systemd-networkd-wait-online.service.d
+  printf '[Service]\nExecStart=\nExecStart=/usr/lib/systemd/systemd-networkd-wait-online --any --operational-state=routable --timeout=60\n' \
+    | sudo tee /etc/systemd/system/systemd-networkd-wait-online.service.d/any-link.conf >/dev/null
+  sudo systemctl enable systemd-networkd-wait-online.service
+fi
 sudo usermod -aG bluetooth "$USER_NAME"
 
 echo "==> python venv"
