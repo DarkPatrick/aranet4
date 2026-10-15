@@ -25,7 +25,7 @@ def setup(tmp_path):
 
 
 def check_prompt(p):
-    for head in ("## Наблюдения", "## Молнии", "## ECMWF", "## Бюллетени", "## Предупреждения"):
+    for head in ("## Наблюдения", "## Молнии", "## Метеорадар", "## ECMWF", "## Бюллетени", "## Предупреждения"):
         assert head in p
     lines = p.split("## Наблюдения")[1].split("## Молнии")[0].splitlines()
     key = [l for l in lines if l.startswith("ATHALASSA,")]
@@ -36,6 +36,7 @@ def check_prompt(p):
 def test_prompt_from_files_and_from_the_api_match(tmp_path, monkeypatch):
     path = setup(tmp_path)
     monkeypatch.setattr(ai_forecast, "ecmwf_csv", lambda src: "station,time\nATHALASSA,07.10 01:00")
+    monkeypatch.setattr(ai_forecast, "radar_csv", lambda api, now: "радар не подключён")
     from_db = ai_forecast.build_prompt(ai_forecast.DbSource(path, str(tmp_path / "none.db")), NOW)
     check_prompt(from_db)
     srv = dashboard.make_server("127.0.0.1", 0, str(tmp_path / "a.db"), path, str(tmp_path / "none.db"))
@@ -63,6 +64,57 @@ def test_ask_save_and_serve(tmp_path):
     finally:
         srv.shutdown()
     assert ai_forecast.latest(str(tmp_path / "nothing")) is None
+
+
+def serve_json(payload):
+    import http.server
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.server.paths.append(self.path)
+            body = json.dumps(payload).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    srv.paths = []
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def test_radar_half_hourly_frames_cells_and_empty_frames():
+    frames = [{"ts": NOW - 3600 - k * 600, "sites": ["LCA"], "cells": [[35.0, 33.5, 100 + k, 0, 25.0]]} for k in range(3)]
+    frames.append({"ts": NOW - 600, "sites": ["LCA", "PFO"], "cells": []})
+    srv = serve_json({"available": True, "cell_degrees": 0.5, "frames": sorted(frames, key=lambda f: f["ts"])})
+    try:
+        text = ai_forecast.radar_csv(f"http://127.0.0.1:{srv.server_address[1]}", NOW)
+    finally:
+        srv.shutdown()
+    assert srv.paths == [f"/api/weather/radar-cells?from={NOW - 3 * 3600}&to={NOW}"]
+    rows = text.split("max_dbz\n")[1].splitlines()
+    # the newest frame in each half hour back from NOW: -10' and -60' (which hides -70' and -80')
+    assert len(rows) == 2 and rows[1].endswith("LCA+PFO,,,0,0,") and rows[0].endswith(",LCA,35.0,33.5,100,0,25.0")
+    assert "молчит" not in text
+
+
+def test_radar_missing_or_silent_is_said_so():
+    assert ai_forecast.radar_csv(None, NOW) == "радар не подключён"
+    assert ai_forecast.radar_csv("http://127.0.0.1:9", NOW) == "радарные данные недоступны"
+    srv = serve_json({"available": True, "frames": []})
+    try:
+        assert "радарных кадров нет" in ai_forecast.radar_csv(f"http://127.0.0.1:{srv.server_address[1]}", NOW)
+    finally:
+        srv.shutdown()
+    srv = serve_json({"available": True, "frames": [{"ts": NOW - 7200, "sites": ["PFO"], "cells": []}]})
+    try:
+        assert "радар молчит 120 мин" in ai_forecast.radar_csv(f"http://127.0.0.1:{srv.server_address[1]}", NOW)
+    finally:
+        srv.shutdown()
 
 
 def test_schema_is_strict():

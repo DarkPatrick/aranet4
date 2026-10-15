@@ -2,7 +2,7 @@
 
 The prompt carries the last 24 h of observations (15 key stations hourly, the rest
 every 3 h), the weather service's bulletins and warnings, lightning by hour and place,
-and the ECMWF IFS forecast (9 km, via Open-Meteo) for the key stations: the next 24 h
+the rain radar's echo over the last 3 h (when the CyDoM radars are running), and the ECMWF IFS forecast (9 km, via Open-Meteo) for the key stations: the next 24 h
 hourly and the past 24 h every 3 h, so the model can see where ECMWF was off yesterday.
 The answer is JSON (a schema the CLI enforces), saved as <issued>.json and latest.json in
 ARANET_AI_DIR, which the dashboard serves.
@@ -11,6 +11,9 @@ The model runs through a command line tool reading the prompt on stdin, by defau
 (ARANET_AI_CMD overrides it). The CLI's login belongs to a person's account, so this may
 run as another user than the dashboard: with --api it reads everything through the
 dashboard's own HTTP API instead of the database files.
+
+The radar summary comes from the Kairo API (ARANET_RADAR_API, default the one on this host):
+CyDoM radar composites reduced to echo area and peak reflectivity per 0.5 degree cell.
 
     aranet-ai-forecast                               # from the local databases
     aranet-ai-forecast --api http://127.0.0.1:8091   # from a running dashboard
@@ -47,6 +50,9 @@ ECMWF_VARS = ["temperature_2m", "relative_humidity_2m", "precipitation", "cloud_
               "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "weather_code"]
 DEFAULT_CMD = ("codex exec --model gpt-6-sol --skip-git-repo-check --ephemeral --sandbox read-only "
                "--ignore-rules --color never")
+DEFAULT_RADAR_API = "http://127.0.0.1:8092"
+RADAR_HOURS = 3
+RADAR_STEP = 30 * 60  # one frame per half hour is enough to see where the rain moves
 UA = {"User-Agent": "aranet-monitor/0.1 (+https://github.com/DarkPatrick/aranet4)"}
 
 
@@ -73,17 +79,20 @@ ANSWER_SCHEMA = {"type": "object", "additionalProperties": False,
 
 INSTRUCTIONS = f"""Ты — синоптик, который готовит прогноз погоды для Кипра. Отвечай по-русски.
 Ниже все данные, которые есть: наблюдения 55 автоматических станций метеослужбы Кипра за последние 24 часа,
-молнии со спутника Meteosat-12, текстовые бюллетени и предупреждения метеослужбы и прогноз модели ECMWF IFS
+молнии со спутника Meteosat-12, эхо метеорадаров метеослужбы (Ларнака и Пафос) за последние 3 часа, текстовые бюллетени и предупреждения метеослужбы и прогноз модели ECMWF IFS
 (9 км) для 15 ключевых станций — на 24 часа вперёд и за прошедшие сутки (чтобы сравнить модель с фактом).
 
 Задача: свой прогноз на ближайшие 4, 12 и 24 часа от момента выпуска по шести районам: {", ".join(REGIONS)}.
 - Сравни прогноз ECMWF за прошедшие сутки с наблюдениями на тех же станциях и учти систематические ошибки
   модели (температура, ветер, осадки) — опиши их в model_vs_obs.
 - Для ближайших 4 часов больше опирайся на текущие наблюдения и их тренды (суточный ход, бриз, куда смещаются
-  грозовые очаги по молниям и ветру), дальше — на модель с поправками и на бюллетени метеослужбы.
+  грозовые очаги по молниям и ветру, куда и с какой скоростью смещаются зоны осадков по радару), дальше — на модель с поправками и на бюллетени метеослужбы.
 - temp_min/temp_max — диапазон температуры воздуха в районе за горизонт (от момента выпуска до его конца).
 - precip_chance и thunder_chance — вероятность в процентах, что в районе за этот горизонт будут осадки ≥ 0,2 мм
   и гроза. Будь откалиброван: не завышай и не занижай.
+- Радар показывает, где осадки идут сейчас: экстраполируй смещение зон эха на ближайшие часы и сверяй с моделью.
+  Слабое эхо (до ~20 dBZ) над морем или у самого радара бывает помехой, а не дождём. Если раздел радара пуст
+  или радар недоступен, это не значит, что осадков нет.
 - confidence — насколько уверен; если данные противоречат друг другу, скажи об этом в overview.
 - situation — коротко синоптическая ситуация (что происходит и почему), summary — 1–2 предложения для человека.
 - risks — заметные риски (грозы, ливни, сильный ветер, жара, туман), пустой список, если их нет.
@@ -199,6 +208,40 @@ def lightning_csv(src, now: int) -> str:
     return "hour_start,lat,lon,flashes\n" + "\n".join(f"{_local(h)},{la},{lo},{n}" for (h, la, lo), n in sorted(cells.items()))
 
 
+def radar_csv(api: str | None, now: int) -> str:
+    """Rain radar echo over the last RADAR_HOURS: one frame per RADAR_STEP, one row per 0.5 degree cell."""
+    if not api:
+        return "радар не подключён"
+    url = f"{api.rstrip('/')}/api/weather/radar-cells?from={now - RADAR_HOURS * 3600}&to={now}"
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as resp:
+            data = json.loads(resp.read())
+    except (OSError, ValueError) as e:
+        log.warning("radar unavailable: %s", e)
+        return "радарные данные недоступны"
+    frames = data.get("frames") or []
+    if not frames:
+        return (f"за последние {RADAR_HOURS} часа радарных кадров нет (радары метеослужбы работают с 15 октября "
+                "по 15 июня, или они сейчас не передают данные)")
+    picked, mark = [], now
+    while mark > now - RADAR_HOURS * 3600:  # the newest frame at or before each half-hour mark
+        best = max((f for f in frames if mark - RADAR_STEP < f["ts"] <= mark), key=lambda f: f["ts"], default=None)
+        if best:
+            picked.append(best)
+        mark -= RADAR_STEP
+    rows = []
+    for f in reversed(picked):
+        sites = "+".join(f["sites"])
+        if not f["cells"]:
+            rows.append(f"{_local(f['ts'])},{sites},,,0,0,")
+        rows += [f"{_local(f['ts'])},{sites},{la},{lo},{echo},{heavy},{peak}" for la, lo, echo, heavy, peak in f["cells"]]
+    last = frames[-1]["ts"]
+    note = f"Последний кадр: {_local(last)}" + (f" — радар молчит {round((now - last) / 60)} мин." if now - last > 1800 else ".")
+    return (f"{note} Строка без координат — кадр без эха. echo_km2 — площадь эха ≥ 10 dBZ (осадки от мороси), "
+            "heavy_km2 — ≥ 30 dBZ (сильный дождь, примерно от 3 мм/ч), max_dbz — максимум в ячейке.\n"
+            "time,radars,lat,lon,echo_km2,heavy_km2,max_dbz\n" + "\n".join(rows))
+
+
 def ecmwf_csv(src) -> str:
     """ECMWF IFS at the key stations: the past 24 h every 3 h, the next 24 h hourly."""
     st = {c: (la, lo) for c, la, lo in src.stations()}
@@ -248,7 +291,7 @@ def warnings_text(src) -> str:
     return "\n".join(lines) or "действующих предупреждений нет"
 
 
-def build_prompt(src, now: int | None = None) -> str:
+def build_prompt(src, now: int | None = None, radar_api: str | None = DEFAULT_RADAR_API) -> str:
     now = int(now or time.time())
     meta = "\n".join(f"{c},{la:.3f},{lo:.3f}" for c, la, lo in src.stations())
     sections = [
@@ -257,6 +300,7 @@ def build_prompt(src, now: int | None = None) -> str:
         f"## Станции (код, широта, долгота); ключевые: {', '.join(KEY_STATIONS)}\n{meta}",
         f"## Наблюдения за 24 часа (ключевые станции по часам, остальные с шагом 3 часа)\n{observations_csv(src, now)}",
         f"## Молнии за 24 часа (вспышек в час по ячейкам 0,5°)\n{lightning_csv(src, now)}",
+        f"## Метеорадар за {RADAR_HOURS} часа (эхо по ячейкам 0,5°, кадр каждые 30 минут)\n{radar_csv(radar_api, now)}",
         f"## ECMWF IFS для ключевых станций (прошлые сутки с шагом 3 ч, затем 24 ч вперёд по часам; wmo_code — код погоды WMO)\n{ecmwf_csv(src)}",
         f"## Бюллетени метеослужбы Кипра\n{bulletins_text(src)}",
         f"## Предупреждения и море\n{warnings_text(src)}",
@@ -311,13 +355,16 @@ def main(argv=None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="print the prompt and exit")
     parser.add_argument("--cmd", help="the model CLI (default: ARANET_AI_CMD, else Codex with gpt-6-sol)")
     parser.add_argument("--api", help="read through a running dashboard (e.g. http://127.0.0.1:8091) instead of the files")
+    parser.add_argument("--radar-api", help="Kairo API with the radar summary (default: ARANET_RADAR_API, else "
+                        f"{DEFAULT_RADAR_API}); 'none' leaves the radar out")
     parser.add_argument("--out", help="where to save the answers (default: ARANET_AI_DIR, else data/ai)")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     s = get_settings(args.config)
     src = ApiSource(args.api) if args.api else DbSource(s.weather_db, s.lightning_db)
     now = int(time.time())
-    prompt = build_prompt(src, now)
+    radar_api = args.radar_api or os.environ.get("ARANET_RADAR_API") or DEFAULT_RADAR_API
+    prompt = build_prompt(src, now, None if radar_api == "none" else radar_api)
     if args.dry_run:
         print(prompt)
         return 0
