@@ -1,6 +1,7 @@
 import json
 import sys
 import threading
+import urllib.error
 import urllib.request
 
 from aranet_monitor import ai_forecast, dashboard, weather
@@ -126,3 +127,32 @@ def test_schema_is_strict():
         if s.get("type") == "array":
             walk(s["items"])
     walk(ai_forecast.ANSWER_SCHEMA)
+
+
+def test_a_failing_optional_source_is_retried_then_left_out(tmp_path, monkeypatch):
+    path = setup(tmp_path)
+    monkeypatch.setattr(ai_forecast, "RETRY_DELAYS", (0, 0))
+    calls = []
+
+    def down(src):
+        calls.append(1)
+        raise urllib.error.HTTPError("https://api.open-meteo.com", 503, "Service Unavailable", {}, None)
+
+    monkeypatch.setattr(ai_forecast, "ecmwf_csv", down)
+    monkeypatch.setattr(ai_forecast, "radar_csv", lambda api, now: "радар не подключён")
+    prompt = ai_forecast.build_prompt(ai_forecast.DbSource(path, str(tmp_path / "none.db")), NOW)
+    assert len(calls) == 3 and "ECMWF: данные недоступны" in prompt
+    check_prompt(prompt)
+
+
+def test_optional_returns_on_a_later_success(monkeypatch):
+    monkeypatch.setattr(ai_forecast, "RETRY_DELAYS", (0, 0))
+    answers = iter([OSError("reset"), "ok"])
+
+    def flaky():
+        a = next(answers)
+        if isinstance(a, Exception):
+            raise a
+        return a
+
+    assert ai_forecast.optional("X", flaky) == "ok"

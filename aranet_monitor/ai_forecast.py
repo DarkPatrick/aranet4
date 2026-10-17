@@ -52,7 +52,8 @@ DEFAULT_CMD = ("codex exec --model gpt-6-sol --skip-git-repo-check --ephemeral -
                "--ignore-rules --color never")
 DEFAULT_RADAR_API = "http://127.0.0.1:8092"
 RADAR_HOURS = 3
-RADAR_STEP = 30 * 60  # one frame per half hour is enough to see where the rain moves
+RADAR_STEP = 30 * 60
+RETRY_DELAYS = (5, 20)  # seconds before the 2nd and 3rd attempt at an optional source  # one frame per half hour is enough to see where the rain moves
 UA = {"User-Agent": "aranet-monitor/0.1 (+https://github.com/DarkPatrick/aranet4)"}
 
 
@@ -90,6 +91,7 @@ INSTRUCTIONS = f"""Ты — синоптик, который готовит пр
 - temp_min/temp_max — диапазон температуры воздуха в районе за горизонт (от момента выпуска до его конца).
 - precip_chance и thunder_chance — вероятность в процентах, что в районе за этот горизонт будут осадки ≥ 0,2 мм
   и гроза. Будь откалиброван: не завышай и не занижай.
+- Если какой-то раздел помечен как недоступный, опирайся на остальные данные и снизь confidence.
 - Радар показывает, где осадки идут сейчас: экстраполируй смещение зон эха на ближайшие часы и сверяй с моделью.
   Слабое эхо (до ~20 dBZ) над морем или у самого радара бывает помехой, а не дождём. Если раздел радара пуст
   или радар недоступен, это не значит, что осадков нет.
@@ -291,6 +293,20 @@ def warnings_text(src) -> str:
     return "\n".join(lines) or "действующих предупреждений нет"
 
 
+def optional(label: str, fn, *args) -> str:
+    """An optional prompt section: retried on network errors; if it still fails the forecast is
+    made without it and the prompt says so (one 503 from Open-Meteo once cancelled a whole run)."""
+    for attempt, delay in enumerate((*RETRY_DELAYS, None)):
+        try:
+            return fn(*args)
+        except (OSError, ValueError) as exc:  # urllib errors are OSErrors; ValueError: a bad JSON body
+            if delay is None:
+                log.warning("%s unavailable after %d attempts: %s", label, attempt + 1, exc)
+                return f"{label}: данные недоступны (источник не ответил), прогноз составлен без них"
+            log.info("%s: %s, retrying in %d s", label, exc, delay)
+            time.sleep(delay)
+
+
 def build_prompt(src, now: int | None = None, radar_api: str | None = DEFAULT_RADAR_API) -> str:
     now = int(now or time.time())
     meta = "\n".join(f"{c},{la:.3f},{lo:.3f}" for c, la, lo in src.stations())
@@ -301,9 +317,9 @@ def build_prompt(src, now: int | None = None, radar_api: str | None = DEFAULT_RA
         f"## Наблюдения за 24 часа (ключевые станции по часам, остальные с шагом 3 часа)\n{observations_csv(src, now)}",
         f"## Молнии за 24 часа (вспышек в час по ячейкам 0,5°)\n{lightning_csv(src, now)}",
         f"## Метеорадар за {RADAR_HOURS} часа (эхо по ячейкам 0,5°, кадр каждые 30 минут)\n{radar_csv(radar_api, now)}",
-        f"## ECMWF IFS для ключевых станций (прошлые сутки с шагом 3 ч, затем 24 ч вперёд по часам; wmo_code — код погоды WMO)\n{ecmwf_csv(src)}",
-        f"## Бюллетени метеослужбы Кипра\n{bulletins_text(src)}",
-        f"## Предупреждения и море\n{warnings_text(src)}",
+        f"## ECMWF IFS для ключевых станций (прошлые сутки с шагом 3 ч, затем 24 ч вперёд по часам; wmo_code — код погоды WMO)\n{optional("ECMWF", ecmwf_csv, src)}",
+        f"## Бюллетени метеослужбы Кипра\n{optional('Бюллетени', bulletins_text, src)}",
+        f"## Предупреждения и море\n{optional('Предупреждения', warnings_text, src)}",
     ]
     return "\n\n".join(sections)
 
