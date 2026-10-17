@@ -136,8 +136,28 @@ def parse(xml_bytes: bytes, now: float | None = None):
     return stations, rows
 
 
+# Values no Cyprus station can measure. A failed logger reports -40 °C with 0 % humidity (PENTAKOMO
+# from 2026-10-17) and its 10 m wind channel reads 0 too; such readings are stored as missing.
+SENTINEL_TEMP = -39.5
+MAX_TEMP = 55
+
+
+def clean(row: dict) -> dict:
+    """The row with physically impossible values replaced by None."""
+    row = dict(row)
+    temp, rh = row.get("temp"), row.get("rh")
+    if temp is not None and temp <= SENTINEL_TEMP:
+        row.update(temp=None, rh=None, wind10=None)
+    elif temp is not None and temp > MAX_TEMP:
+        row["temp"] = None
+    if rh is not None and rh <= 0:
+        row["rh"] = None
+    return row
+
+
 def store(conn: sqlite3.Connection, stations, rows) -> int:
     cols = ["station", "ts", *VALUE_COLUMNS, "extra"]
+    rows = [clean(r) for r in rows]
     with conn:
         conn.executemany(
             "INSERT INTO stations (code, lat, lon) VALUES (?, ?, ?)"

@@ -108,3 +108,14 @@ def test_dashboard_weather_missing_db(tmp_path):
         assert not (tmp_path / "none.db").exists()
     finally:
         srv.shutdown()
+
+
+def test_a_failed_sensor_is_stored_as_missing(tmp_path):
+    conn = weather.connect(str(tmp_path / "w.db"))
+    base = {c: None for c in weather.VALUE_COLUMNS}
+    rows = [dict(base, station="P", ts=600, temp=-40.0, rh=0.0, wind10=0.0, wind2=7.2, extra=None),
+            dict(base, station="P", ts=1200, temp=58.0, rh=40.0, extra=None),
+            dict(base, station="P", ts=1800, temp=21.5, rh=60.0, wind10=3.0, extra=None)]
+    weather.store(conn, [("P", 35.0, 33.0)], rows)
+    got = conn.execute("SELECT temp, rh, wind10, wind2 FROM observations ORDER BY ts").fetchall()
+    assert [tuple(r) for r in got] == [(None, None, None, 7.2), (None, 40.0, None, None), (21.5, 60.0, 3.0, None)]
