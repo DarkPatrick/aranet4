@@ -48,6 +48,26 @@ def test_parse_sea_forecast():
     assert all(len(v) == 3 for v in areas.values())
 
 
+def test_unavailable_bulletin_is_skipped_and_never_served(tmp_path):
+    raw = (FIX / "sea_unavailable_en.html").read_bytes()
+    assert dom.UNAVAILABLE.search(raw.decode()) and dom.parse_sea(raw, "B") is None
+    conn = dom.connect(str(tmp_path / "w.db"))
+    good = dom.parse_sea((FIX / "sea_a_en.html").read_bytes(), "A")
+    dom.store_sea(conn, good)
+    # a row written by the old parser from such a page: zeros and the next line as "warnings"
+    dom.store_sea(conn, dict(good, issue="B", valid_from=good["valid_from"] + 21600, issued=good["issued"] + 21600,
+                             sst=0.0, pressure=0.0, warnings="AREA",
+                             synopsis="THIS BULLETIN IS UNAVAILABLE. THE PREVIOUS BULLETIN IS IN FORCE"))
+    m = dom.marine(conn)
+    assert m["forecast"]["issue"] == "A" and m["forecast"]["warnings"] == "NIL" and m["sst"]["sst"] == [27]
+
+
+def test_empty_field_does_not_take_the_next_line():
+    page = (FIX / "sea_a_en.html").read_bytes().replace(b"NIL", b"")
+    fc = dom.parse_sea(page, "A")
+    assert fc is not None and fc["warnings"] in (None, "")
+
+
 def test_until_2400_is_next_midnight():
     assert dom._local_ts("03/10/2026", "2400") == local(2026, 10, 4)
 

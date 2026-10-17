@@ -150,14 +150,20 @@ def _local_ts(date_ddmmyyyy: str, hhmm: str) -> int:
 
 # ---------- sea forecasts ----------
 
+# A bulletin CyDoM did not issue: same page layout, every field empty or 0, and this sentence.
+UNAVAILABLE = re.compile(r"BULLETIN IS UNAVAILABLE", re.I)
+
 def parse_sea(raw: bytes, issue: str) -> dict | None:
     lines = html_text(raw)
     text = "\n".join(lines)
+    if UNAVAILABLE.search(text):  # the previous bulletin stays in force
+        return None
     period = re.search(r"FROM\s+(\d{4})\s+(\d{2}/\d{2}/\d{4})\s+UNTIL\s+(\d{4})\s+(\d{2}/\d{2}/\d{4})", text)
     if not period:
         return None
     num = lambda pat: (lambda m: float(m.group(1)) if m else None)(re.search(pat, text))
-    field = lambda name: (lambda m: m.group(1).strip() if m else None)(re.search(rf"^{name}:\s*(.*)$", text, re.M))
+    # [ \t]*, not \s*: an empty field must not take the next line (it once read "AREA", a table header).
+    field = lambda name: (lambda m: m.group(1).strip() or None if m else None)(re.search(rf"^{name}:[ \t]*(.*)$", text, re.M))
 
     # synopsis: the paragraph(s) between the pressure line and "Visibility:"
     synopsis = []
@@ -318,10 +324,14 @@ def collect_forecast(db_path: str) -> None:
     try:
         for issue, url in SEA_PAGES.items():
             try:
-                fc = parse_sea(get(url), issue)
+                raw = get(url)
             except (urllib.error.URLError, TimeoutError, OSError) as exc:
                 log.warning("sea forecast %s: %s", issue, exc)
                 continue
+            if UNAVAILABLE.search(raw.decode("utf-8", "replace")):
+                log.info("sea forecast %s: bulletin unavailable, the previous one stays in force", issue)
+                continue
+            fc = parse_sea(raw, issue)
             if fc:
                 store_sea(conn, fc)
                 log.info("sea %s: valid from %s, SST %s, warnings %s", issue,
@@ -575,9 +585,11 @@ def _active_alerts_safe(conn) -> list[dict]:
 
 @_tolerant(lambda: {"forecast": None, "sst": {"ts": [], "sst": []}, "warnings": None, "radar": {}, "alerts": []})
 def marine(conn) -> dict:
-    latest = conn.execute("SELECT * FROM sea_forecasts ORDER BY issued DESC, valid_from DESC LIMIT 1").fetchone()
+    # Rows stored from an unavailable bulletin before such pages were skipped are never served.
+    real = "COALESCE(synopsis, '') NOT LIKE '%BULLETIN IS UNAVAILABLE%'"
+    latest = conn.execute(f"SELECT * FROM sea_forecasts WHERE {real} ORDER BY issued DESC, valid_from DESC LIMIT 1").fetchone()
     sst = conn.execute(
-        "SELECT valid_from AS ts, sst FROM sea_forecasts WHERE sst IS NOT NULL ORDER BY valid_from"
+        f"SELECT valid_from AS ts, sst FROM sea_forecasts WHERE sst IS NOT NULL AND {real} ORDER BY valid_from"
     ).fetchall()
     warn = conn.execute("SELECT ts, text FROM warnings ORDER BY ts DESC LIMIT 1").fetchone()
     out = dict(latest) if latest else None
